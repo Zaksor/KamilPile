@@ -90,7 +90,7 @@ switch ($Task.ToLowerInvariant()) {
 
     { $_ -in 'test', 'tests' } {
         Write-Step 'Running the tests'
-        Invoke-Step 'dotnet' (@('test', '--nologo') + $Rest)
+        Invoke-Step 'dotnet' (@('test') + $Rest)
         Write-Done 'Tests passed.'
         break
     }
@@ -122,7 +122,7 @@ switch ($Task.ToLowerInvariant()) {
         Invoke-Step 'dotnet' @('build', '--nologo', '-c', 'Release', '/p:TreatWarningsAsErrors=true')
 
         Write-Step 'Running the tests'
-        Invoke-Step 'dotnet' @('test', '--nologo')
+        Invoke-Step 'dotnet' @('test')
 
         Write-Step 'Building the standalone .exe'
         & (Join-Path $Root 'publish.ps1')
