@@ -64,6 +64,7 @@ function Show-Help {
         'build'   = 'Compile everything'
         'exe'     = 'Build the standalone offline MetrykiPali.exe'
         'check'   = 'Build (warnings are errors) + test + publish. Run before merging.'
+        'testcopy' = 'Build a test copy with its own journal:  .\run.ps1 testcopy <folder>'
         'data'    = 'Open the folder holding the saved journal'
         'clean'   = 'Delete bin, obj and publish'
         'help'    = 'This list'
@@ -132,6 +133,45 @@ switch ($Task.ToLowerInvariant()) {
         Write-Host '  Still worth doing by hand if you changed the UI or the saved format:' -ForegroundColor DarkGray
         Write-Host '    - start the .exe and use it once (the tests drive the presenter, not the window)' -ForegroundColor DarkGray
         Write-Host '    - open an existing projekt.mpali with the new build' -ForegroundColor DarkGray
+        break
+    }
+
+    'testcopy' {
+        # A copy of the app to try a branch on real data. The 'dane' folder next
+        # to the exe makes that copy keep its journal there, so nothing it does
+        # can reach the real journal in %APPDATA%.
+        if (-not $Rest -or -not $Rest[0]) {
+            Write-Host 'Usage: .\run.ps1 testcopy <folder>' -ForegroundColor Red
+            exit 1
+        }
+        $target = $Rest[0]
+        $appDir = Join-Path $target 'aplikacja'
+        $localData = Join-Path $appDir 'dane'
+
+        Write-Step 'Building the standalone .exe'
+        & (Join-Path $Root 'publish.ps1')
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+        Write-Step "Copying it to $appDir"
+        New-Item -ItemType Directory -Force $localData | Out-Null
+        Copy-Item $Exe $appDir -Force
+
+        # Rebuilding must not wipe what the tester has entered since, so the
+        # real journal is copied in only the first time.
+        $journal = Join-Path $DataDir 'projekt.mpali'
+        $localJournal = Join-Path $localData 'projekt.mpali'
+        if ((Test-Path $journal) -and -not (Test-Path $localJournal)) {
+            Copy-Item $journal $localJournal
+            Write-Host '  copied the real journal into dane\ (the original is not touched)'
+        }
+
+        $shell = New-Object -ComObject WScript.Shell
+        $link = $shell.CreateShortcut((Join-Path $target 'Uruchom Metryki pali (TEST).lnk'))
+        $link.TargetPath = Join-Path $appDir 'MetrykiPali.exe'
+        $link.WorkingDirectory = $appDir
+        $link.Save()
+
+        Write-Done "Test copy ready: $target"
         break
     }
 
