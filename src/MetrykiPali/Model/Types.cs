@@ -71,6 +71,17 @@ public sealed class MetrykaSettings
     public double ConcreteFactor { get; set; } = 1.30;
 
     public int PilesPerPage { get; set; } = 12;
+
+    /// <summary>The file type the metryki were last generated as; offered again next time.</summary>
+    public MetrykaFormat Format { get; set; } = MetrykaFormat.Xlsx;
+}
+
+/// <summary>The file types the metryki can be written as.</summary>
+[System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<MetrykaFormat>))]
+public enum MetrykaFormat
+{
+    Xlsx,
+    Pdf
 }
 
 /// <summary>

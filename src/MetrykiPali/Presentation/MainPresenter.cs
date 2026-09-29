@@ -88,6 +88,7 @@ public sealed class MainPresenter
             _view.Betoniarnia = s.Betoniarnia;
             _view.ConcreteFactor = s.ConcreteFactor;
             _view.PilesPerPage = s.PilesPerPage;
+            _view.OutputFormat = s.Format;
             _view.JournalDate = s.Data == default ? DateTime.Today : s.Data;
 
             _view.ShowRanges(_project.Ranges);
@@ -282,7 +283,7 @@ public sealed class MainPresenter
                 "Wygenerować metryki tylko dla pali z dziennika?"))
             return;
 
-        WriteMetryki(days, $"Metryki pali {DateTime.Today:yyyy-MM-dd}.xlsx");
+        WriteMetryki(days, $"Metryki pali {DateTime.Today:yyyy-MM-dd}");
     }
 
     /// <summary>
@@ -306,15 +307,20 @@ public sealed class MainPresenter
         var first = days[0].Date;
         var last = days[^1].Date;
         var name = first == last
-            ? $"Metryki pali {first:yyyy-MM-dd}.xlsx"
-            : $"Metryki pali {first:yyyy-MM-dd} do {last:yyyy-MM-dd}.xlsx";
+            ? $"Metryki pali {first:yyyy-MM-dd}"
+            : $"Metryki pali {first:yyyy-MM-dd} do {last:yyyy-MM-dd}";
 
         WriteMetryki(days, name);
     }
 
+    /// <summary>
+    /// Asks where to save and writes the days there, in the format picked next
+    /// to the generate buttons - the extension of the suggested name carries it.
+    /// </summary>
     private void WriteMetryki(List<WorkDay> days, string suggestedName)
     {
-        var path = _view.AskWhereToSaveMetryki(suggestedName);
+        var extension = _project.Settings.Format == MetrykaFormat.Pdf ? ".pdf" : ".xlsx";
+        var path = _view.AskWhereToSaveMetryki(suggestedName + extension);
         if (path is null) return;
 
         try
@@ -403,6 +409,7 @@ public sealed class MainPresenter
         s.Betoniarnia = _view.Betoniarnia.Trim();
         s.ConcreteFactor = _view.ConcreteFactor;
         s.PilesPerPage = _view.PilesPerPage;
+        s.Format = _view.OutputFormat;
         s.Data = _view.JournalDate.Date;
     }
 

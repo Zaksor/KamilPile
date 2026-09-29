@@ -34,8 +34,8 @@ flowchart LR
     C -->|"saved automatically"| D[("💾 projekt.mpali<br/>on your PC")]
     D -->|"reopened next morning"| C
     C --> E["Generuj metryki<br/>(one button, at the end)"]
-    E --> F["📘 Metryki pali.xlsx<br/>one page per 12 piles<br/>each page dated"]
-    F --> G["🖨️ print or save as PDF"]
+    E --> F["📘 Metryki pali .xlsx or .pdf<br/>one page per 12 piles<br/>each page dated"]
+    F --> G["🖨️ print or send"]
 ```
 
 You can close the app, shut the computer down, and come back a week later. The
@@ -131,9 +131,13 @@ straight away.
 
 ### Step 5 — generate
 
-Press **Generuj metryki — wszystkie dni** and choose where to save. Every day in
-the journal is written in one go. Then **Otwórz wygenerowany plik** to check it,
-and print from Excel or *Save as PDF*.
+Pick **Format** next to the buttons — **Excel (.xlsx)** or **PDF (.pdf)**; the
+choice is remembered. Then press **Generuj metryki — wszystkie dni** and choose
+where to save. Every day in the journal is written in one go. **Otwórz
+wygenerowany plik** opens it to check and print.
+
+The PDF is drawn page for page like the workbook prints — same layout, Calibri
+embedded — so it can be sent as it is, with no Excel needed.
 
 Piles with no date yet are **not** included — the app tells you how many are
 still outstanding and asks before continuing.
@@ -265,7 +269,7 @@ flowchart TB
     subgraph SVC["Services — Services/"]
         direction TB
         S1["IScheduleReader → PileTableReader"]
-        S2["IMetrykaWriter → MetrykaWriter"]
+        S2["IMetrykaWriter → MetrykaWriter / MetrykaPdfWriter"]
         S3["IProjectRepository → JsonProjectRepository"]
     end
 
@@ -315,6 +319,8 @@ src/MetrykiPali/
     Interfaces.cs             IScheduleReader, IMetrykaWriter, IProjectRepository
     PileTableReader.cs        reads .xlsx / .xls / .csv / .pdf
     MetrykaWriter.cs          writes the paginated METRYKA PALI workbook
+    MetrykaPdfWriter.cs       writes the same pages straight to PDF
+    MetrykaFileWriter.cs      picks the writer from the file extension
     JsonProjectRepository.cs  saves and restores the journal
   Presentation/
     IMainView.cs              what the presenter may ask the window for
@@ -345,6 +351,7 @@ dotnet test
 | `PileTableReaderTests` | csv/xlsx/pdf, comma *and* dot decimals, junk skipped, a file locked by Excel, unsupported types |
 | `PaginationTests` | days never share a page, an 18-pile day splits 12 + 6, date ordering |
 | `MetrykaWriterTests` | the produced workbook read back: label rows, 48-row blocks, per-page dates, page breaks, A4 fit-to-width, borders, an 80-page run |
+| `MetrykaPdfWriterTests` | the PDF read back: pages per day, dates, title and table text, Polish characters, page numbers, A4; `.pdf` vs `.xlsx` routing |
 | `ProjectStoreTests` | round-trip, pour dates and corrected lengths, Polish characters, missing/corrupt files, daily backup |
 | `WorkflowTests` | three site days across two restarts, then one generation |
 | `RobustnessTests` | awkward inputs found by probing: `.xls` and corrupt workbooks, a schedule behind a cover sheet, split PDF rows, pour dates across timezones |
@@ -391,8 +398,6 @@ git log --graph --oneline --decorate --all     # what has changed, feature by fe
 
 ## 10. Known limits
 
-- Output is `.xlsx`. PDF is one *Save as PDF* away in Excel, but the app does not
-  write PDF directly.
 - The source table's five columns must be in the order shown; there is no column
   mapping screen yet.
 - **Beton z betoniarni** is one value for the whole job, not per day.

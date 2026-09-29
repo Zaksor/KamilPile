@@ -581,6 +581,49 @@ public class MainPresenterTests
         Assert.Equal(@"C:\wyjscie\dzien.xlsx", Assert.Single(_view.Opened));
     }
 
+    // ---------------------------------------------------------------- format
+
+    [Fact]
+    public void Both_generate_buttons_offer_a_pdf_when_pdf_is_picked()
+    {
+        LoadSchedule();
+        _view.LogDay(D12, "1-12");
+        _view.ChangeOutputFormat(MetrykaFormat.Pdf);
+        _view.MetrykiPath = @"C:\wyjscie\metryki.pdf";
+
+        _view.ClickGenerate();
+        Assert.EndsWith(".pdf", _view.SuggestedMetrykiName);
+
+        _view.ClickGenerateSelectedDays(D12);
+        Assert.Equal("Metryki pali 2022-09-12.pdf", _view.SuggestedMetrykiName);
+
+        Assert.Equal(@"C:\wyjscie\metryki.pdf", _writer.Path);
+    }
+
+    [Fact]
+    public void Excel_is_offered_until_something_else_is_picked()
+    {
+        LoadSchedule();
+        _view.LogDay(D12, "1-12");
+        _view.MetrykiPath = @"C:\wyjscie\metryki.xlsx";
+
+        _view.ClickGenerateSelectedDays(D12);
+
+        Assert.Equal("Metryki pali 2022-09-12.xlsx", _view.SuggestedMetrykiName);
+    }
+
+    [Fact]
+    public void The_picked_format_is_remembered_next_time()
+    {
+        LoadSchedule();
+        _view.ChangeOutputFormat(MetrykaFormat.Pdf);
+
+        var next = new FakeMainView();
+        new MainPresenter(next, _reader, _writer, _repository).Start();
+
+        Assert.Equal(MetrykaFormat.Pdf, next.OutputFormat);
+    }
+
     // --------------------------------------------------------------- saving
 
     [Fact]

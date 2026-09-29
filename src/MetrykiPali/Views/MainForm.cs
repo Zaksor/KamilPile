@@ -41,7 +41,12 @@ public sealed class MainForm : Form, IMainView
     private readonly Button _btnGenerate = new() { Text = "Generuj metryki — wszystkie dni", Dock = DockStyle.Fill, Height = 34, Enabled = false };
     private readonly Button _btnGenerateSelected = new() { Text = "Generuj metryki — zaznaczone dni", Dock = DockStyle.Fill, Height = 34, Enabled = false };
     private readonly Button _btnOpen = new() { Text = "Otwórz wygenerowany plik", Dock = DockStyle.Fill, Height = 34, Enabled = false };
-    private readonly Label _lblStatus = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
+    private readonly ComboBox _cmbFormat = new()
+    {
+        DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill, Margin = new Padding(3, 8, 3, 3),
+        Items = { "Excel (.xlsx)", "PDF (.pdf)" }, SelectedIndex = 0
+    };
+    private readonly Label _lblStatus =new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
 
     public MainForm()
     {
@@ -76,6 +81,13 @@ public sealed class MainForm : Form, IMainView
     {
         get => (int)_numPerPage.Value;
         set => _numPerPage.Value = Math.Clamp(value, _numPerPage.Minimum, _numPerPage.Maximum);
+    }
+
+    // Item order in _cmbFormat follows the enum: 0 = Xlsx, 1 = Pdf.
+    MetrykaFormat IMainView.OutputFormat
+    {
+        get => _cmbFormat.SelectedIndex == 1 ? MetrykaFormat.Pdf : MetrykaFormat.Xlsx;
+        set => _cmbFormat.SelectedIndex = value == MetrykaFormat.Pdf ? 1 : 0;
     }
 
     DateTime IMainView.JournalDate { get => _dtDay.Value.Date; set => _dtDay.Value = value; }
@@ -150,6 +162,8 @@ public sealed class MainForm : Form, IMainView
         _numFactor.ValueChanged += (_, _) => ConcreteFactorChanged?.Invoke(this, EventArgs.Empty);
         _numPerPage.ValueChanged += (_, _) => PilesPerPageChanged?.Invoke(this, EventArgs.Empty);
         _txtBetoniarnia.TextChanged += (_, _) => ConcretePlantChanged?.Invoke(this, EventArgs.Empty);
+
+        _cmbFormat.SelectedIndexChanged += (_, _) => SettingsChanged?.Invoke(this, EventArgs.Empty);
 
         foreach (var box in new[] { _txtBudowa, _txtWykonawca, _txtMetoda })
             box.Leave += (_, _) => SettingsChanged?.Invoke(this, EventArgs.Empty);
@@ -256,10 +270,11 @@ public sealed class MainForm : Form, IMainView
 
     public string? AskWhereToSaveMetryki(string suggestedName)
     {
+        var pdf = MetrykaFileWriter.IsPdf(suggestedName);
         using var dialog = new SaveFileDialog
         {
-            Title = "Zapisz metryki pali",
-            Filter = "Skoroszyt Excel (*.xlsx)|*.xlsx",
+            Title = pdf ? "Zapisz metryki pali jako PDF" : "Zapisz metryki pali jako Excel",
+            Filter = pdf ? "Dokument PDF (*.pdf)|*.pdf" : "Skoroszyt Excel (*.xlsx)|*.xlsx",
             FileName = suggestedName
         };
         return dialog.ShowDialog(this) == DialogResult.OK ? dialog.FileName : null;
@@ -432,15 +447,19 @@ public sealed class MainForm : Form, IMainView
 
     private Control BuildActionBar()
     {
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1, AutoSize = true, Padding = new Padding(0, 8, 0, 0) };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 6, RowCount = 1, AutoSize = true, Padding = new Padding(0, 8, 0, 0) };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
         layout.Controls.Add(_lblStatus, 0, 0);
-        layout.Controls.Add(_btnGenerate, 1, 0);
-        layout.Controls.Add(_btnGenerateSelected, 2, 0);
-        layout.Controls.Add(_btnOpen, 3, 0);
+        layout.Controls.Add(new Label { Text = "Format:", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight }, 1, 0);
+        layout.Controls.Add(_cmbFormat, 2, 0);
+        layout.Controls.Add(_btnGenerate, 3, 0);
+        layout.Controls.Add(_btnGenerateSelected, 4, 0);
+        layout.Controls.Add(_btnOpen, 5, 0);
         return layout;
     }
 

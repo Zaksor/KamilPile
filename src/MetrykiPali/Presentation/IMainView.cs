@@ -23,6 +23,7 @@ public interface IMainView
     string Betoniarnia { get; set; }
     double ConcreteFactor { get; set; }
     int PilesPerPage { get; set; }
+    MetrykaFormat OutputFormat { get; set; }
     DateTime JournalDate { get; set; }
     string JournalPiles { get; set; }
     string StatusText { get; set; }

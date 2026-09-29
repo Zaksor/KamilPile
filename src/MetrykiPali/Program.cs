@@ -33,7 +33,7 @@ internal static class Program
         var presenter = new MainPresenter(
             view,
             new PileTableReader(),
-            new MetrykaWriter(),
+            new MetrykaFileWriter(new MetrykaWriter(), new MetrykaPdfWriter()),
             new JsonProjectRepository(useLocalData ? localData : null));
 
         presenter.Start();
