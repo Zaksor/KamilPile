@@ -24,6 +24,7 @@ internal sealed class FakeMainView : IMainView
 
     // --- what the user has picked --------------------------------------
     public DateTime? SelectedJournalDay { get; set; }
+    public IReadOnlyList<DateTime> SelectedJournalDays { get; set; } = Array.Empty<DateTime>();
     public IReadOnlyList<int> SelectedPileNumbers { get; set; } = Array.Empty<int>();
 
     // --- what the presenter displayed ----------------------------------
@@ -79,6 +80,7 @@ internal sealed class FakeMainView : IMainView
     public event EventHandler? AddSelectedPilesRequested;
     public event EventHandler? RemoveDayRequested;
     public event EventHandler? GenerateRequested;
+    public event EventHandler? GenerateSelectedDaysRequested;
     public event EventHandler? OpenOutputRequested;
     public event EventHandler? SettingsChanged;
     public event EventHandler? ConcreteFactorChanged;
@@ -95,6 +97,11 @@ internal sealed class FakeMainView : IMainView
     public void ClickAddSelected() => AddSelectedPilesRequested?.Invoke(this, EventArgs.Empty);
     public void ClickRemoveDay() => RemoveDayRequested?.Invoke(this, EventArgs.Empty);
     public void ClickGenerate() => GenerateRequested?.Invoke(this, EventArgs.Empty);
+    public void ClickGenerateSelectedDays(params DateTime[] days)
+    {
+        SelectedJournalDays = days;
+        GenerateSelectedDaysRequested?.Invoke(this, EventArgs.Empty);
+    }
     public void ClickOpenOutput() => OpenOutputRequested?.Invoke(this, EventArgs.Empty);
     public void ChangeConcreteFactor(double value)
     {

@@ -494,6 +494,93 @@ public class MainPresenterTests
         Assert.Equal(@"C:\wyjscie\metryki.xlsx", Assert.Single(_view.Opened));
     }
 
+    // ------------------------------------------------ generate selected days
+
+    [Fact]
+    public void Generating_selected_days_writes_only_those_days()
+    {
+        LoadSchedule();
+        _view.LogDay(D12, "1-12");
+        _view.LogDay(D13, "13-24");
+        _view.MetrykiPath = @"C:\wyjscie\dzien.xlsx";
+
+        _view.ClickGenerateSelectedDays(D13);
+
+        Assert.Equal(1, _writer.Calls);
+        var day = Assert.Single(_writer.Days);
+        Assert.Equal(D13, day.Date);
+        Assert.Equal(Enumerable.Range(13, 12), day.Piles.Select(p => p.Number));
+    }
+
+    [Fact]
+    public void Several_days_can_be_generated_together()
+    {
+        LoadSchedule();
+        _view.LogDay(D12, "1-12");
+        _view.LogDay(D13, "13-24");
+        _view.LogDay(D13.AddDays(1), "25-36");
+        _view.MetrykiPath = @"C:\wyjscie\dni.xlsx";
+
+        _view.ClickGenerateSelectedDays(D13.AddDays(1), D12);
+
+        Assert.Equal(new[] { D12, D13.AddDays(1) }, _writer.Days.Select(d => d.Date));
+    }
+
+    [Fact]
+    public void Generating_with_no_day_selected_says_so_instead_of_writing()
+    {
+        LoadSchedule();
+        _view.LogDay(D12, "1-12");
+
+        _view.ClickGenerateSelectedDays();
+
+        Assert.Equal(0, _writer.Calls);
+        Assert.Contains(_view.Infos, i => i.Contains("Zaznacz dzień"));
+    }
+
+    [Fact]
+    public void Generating_one_day_does_not_warn_about_piles_logged_on_no_day()
+    {
+        LoadSchedule();
+        _view.LogDay(D12, "1-12");
+        _view.MetrykiPath = @"C:\wyjscie\dzien.xlsx";
+        _view.AnswerConfirm = (title, _) => title != "Gotowe";
+
+        _view.ClickGenerateSelectedDays(D12);
+
+        Assert.DoesNotContain(_view.Questions, q => q.StartsWith("Pale bez daty"));
+        Assert.Equal(1, _writer.Calls);
+    }
+
+    [Fact]
+    public void Generating_one_day_suggests_a_file_named_after_that_day()
+    {
+        LoadSchedule();
+        _view.LogDay(D12, "1-12");
+        _view.LogDay(D13, "13-24");
+        _view.MetrykiPath = @"C:\wyjscie\dzien.xlsx";
+
+        _view.ClickGenerateSelectedDays(D13);
+        Assert.Equal("Metryki pali 2022-09-13.xlsx", _view.SuggestedMetrykiName);
+
+        _view.ClickGenerateSelectedDays(D12, D13);
+        Assert.Equal("Metryki pali 2022-09-12 do 2022-09-13.xlsx", _view.SuggestedMetrykiName);
+    }
+
+    [Fact]
+    public void A_generated_day_can_be_opened_afterwards()
+    {
+        LoadSchedule();
+        _view.LogDay(D12, "1-12");
+        _view.MetrykiPath = @"C:\wyjscie\dzien.xlsx";
+        _view.AnswerConfirm = (title, _) => title != "Gotowe";
+
+        _view.ClickGenerateSelectedDays(D12);
+        _view.ClickOpenOutput();
+
+        Assert.Equal(@"C:\wyjscie\dzien.xlsx", Assert.Single(_view.Opened));
+    }
+
     // --------------------------------------------------------------- saving
 
     [Fact]

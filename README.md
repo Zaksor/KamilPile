@@ -131,12 +131,17 @@ straight away.
 
 ### Step 5 — generate
 
-Press **Generuj metryki (.xlsx)** and choose where to save. Every day in the
-journal is written in one go. Then **Otwórz wygenerowany plik** to check it, and
-print from Excel or *Save as PDF*.
+Press **Generuj metryki — wszystkie dni** and choose where to save. Every day in
+the journal is written in one go. Then **Otwórz wygenerowany plik** to check it,
+and print from Excel or *Save as PDF*.
 
 Piles with no date yet are **not** included — the app tells you how many are
 still outstanding and asks before continuing.
+
+To hand over one day's metryki without waiting for the end of the job, click
+that day on the **Dziennik (dni)** tab and press **Generuj metryki — zaznaczone
+dni**. Ctrl-click or Shift-click picks several days; the file is named after the
+day (`Metryki pali 2022-09-13.xlsx`) or the span (`… 2022-09-12 do 2022-09-13.xlsx`).
 
 ---
 
