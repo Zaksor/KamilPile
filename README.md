@@ -323,7 +323,7 @@ publish.ps1                   builds the standalone offline .exe
 dotnet test
 ```
 
-**159 tests**, about two seconds, no window and no network.
+**169 tests** on xUnit v3, a few seconds, no window and no network.
 
 | Suite | What it covers |
 |---|---|
@@ -336,6 +336,7 @@ dotnet test
 | `MetrykaWriterTests` | the produced workbook read back: label rows, 48-row blocks, per-page dates, page breaks, A4 fit-to-width, borders, an 80-page run |
 | `ProjectStoreTests` | round-trip, pour dates and corrected lengths, Polish characters, missing/corrupt files, daily backup |
 | `WorkflowTests` | three site days across two restarts, then one generation |
+| `RobustnessTests` | awkward inputs found by probing: `.xls` and corrupt workbooks, a schedule behind a cover sheet, split PDF rows, pour dates across timezones |
 
 Test inputs are in [tests/MetrykiPali.Tests/fixtures/](tests/MetrykiPali.Tests/fixtures/)
 and double as sample files to try the app with:
