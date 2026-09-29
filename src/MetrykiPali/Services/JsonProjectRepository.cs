@@ -42,11 +42,20 @@ public sealed class JsonProjectRepository : IProjectRepository
             => writer.WriteStringValue(value.ToString(Format, System.Globalization.CultureInfo.InvariantCulture));
     }
 
-    /// <summary>The project reopened automatically on every start.</summary>
-    public string DefaultPath { get; } = Path.Combine(
+    /// <summary>Where the journal lives unless a different folder is given.</summary>
+    public static string StandardDirectory { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "MetrykiPali",
-        "projekt" + FileExtension);
+        "MetrykiPali");
+
+    /// <param name="directory">
+    /// Folder holding projekt.mpali. Defaults to %APPDATA%\MetrykiPali; a test
+    /// copy of the app points it elsewhere so it cannot touch the real journal.
+    /// </param>
+    public JsonProjectRepository(string? directory = null)
+        => DefaultPath = Path.Combine(directory ?? StandardDirectory, "projekt" + FileExtension);
+
+    /// <summary>The project reopened automatically on every start.</summary>
+    public string DefaultPath { get; }
 
     public void Save(string path, ProjectState state)
     {

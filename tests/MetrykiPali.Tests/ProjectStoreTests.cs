@@ -157,4 +157,20 @@ public sealed class ProjectStoreTests : IDisposable
         Assert.EndsWith(".mpali", Repository.DefaultPath);
         Assert.Contains("MetrykiPali", Repository.DefaultPath);
     }
+
+    /// <summary>
+    /// A test build is given its own folder so it can never write over the real
+    /// journal in %APPDATA%.
+    /// </summary>
+    [Fact]
+    public void A_project_store_given_its_own_folder_keeps_the_journal_there()
+    {
+        var local = new JsonProjectRepository(_dir);
+
+        local.Save(local.DefaultPath, SampleProject());
+
+        Assert.Equal(Path_("projekt.mpali"), local.DefaultPath);
+        Assert.True(File.Exists(Path_("projekt.mpali")));
+        Assert.DoesNotContain(JsonProjectRepository.StandardDirectory, local.DefaultPath);
+    }
 }

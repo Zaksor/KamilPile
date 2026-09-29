@@ -67,6 +67,7 @@ Requires the .NET 10 SDK. Every routine job has a named task:
 .\run.ps1 exe        # build the standalone offline .exe
 .\run.ps1 check      # build + test + publish — everything required before a merge
 .\run.ps1 data       # open the folder holding the saved journal
+.\run.ps1 testcopy <folder>   # a copy of the app to try out, on a copy of the journal
 .\run.ps1 clean      # delete bin, obj and publish
 ```
 
@@ -187,6 +188,11 @@ Notepad. You can copy it to another machine. You can back it up like any file.
   mid-save, the previous journal is still intact rather than half-written.
 - One dated backup is kept the first time you open the app each day.
 - If the file is ever damaged, the app starts empty instead of refusing to open.
+
+**A separate copy for testing** — if a folder named `dane` sits next to
+`MetrykiPali.exe`, that copy of the app keeps its journal there instead of in
+`%APPDATA%`, and says so in the window title. Put a copy of `projekt.mpali` in it
+to try a new version on real data without any risk to the real journal.
 
 **More than one site at a time** — use **Projekt → Zapisz jako...** to keep a
 separate `.mpali` file per site, and **Projekt → Otwórz...** to switch. Starting
