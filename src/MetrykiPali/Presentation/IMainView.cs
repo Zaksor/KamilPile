@@ -5,6 +5,9 @@ namespace MetrykiPali.Presentation;
 /// <summary>Which pile the user edited in the grid, and what changed.</summary>
 public sealed record PileEdited(int RowIndex, string PropertyName);
 
+/// <summary>The user typed a new concrete coefficient for a logged day.</summary>
+public sealed record DayFactorEdited(DateTime Date, double Factor);
+
 /// <summary>
 /// The main window, as the presenter sees it.
 ///
@@ -62,6 +65,7 @@ public interface IMainView
     event EventHandler PilesPerPageChanged;
     event EventHandler ConcretePlantChanged;
     event EventHandler<PileEdited> PileEdited;
+    event EventHandler<DayFactorEdited> DayFactorEdited;
     event EventHandler NewProjectRequested;
     event EventHandler OpenProjectRequested;
     event EventHandler SaveProjectAsRequested;

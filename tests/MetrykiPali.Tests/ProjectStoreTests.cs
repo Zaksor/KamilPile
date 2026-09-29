@@ -158,6 +158,25 @@ public sealed class ProjectStoreTests : IDisposable
         Assert.Contains("MetrykiPali", Repository.DefaultPath);
     }
 
+    [Fact]
+    public void Each_piles_coefficient_is_saved_and_an_outstanding_pile_has_none()
+    {
+        var path = Path_("projekt.mpali");
+        var project = SampleProject();
+        project.Piles = new List<Pile>
+        {
+            new() { Number = 1, Executed = new DateTime(2022, 9, 12), ConcreteFactor = 1.18 },
+            new() { Number = 2 }
+        };
+
+        Repository.Save(path, project);
+        var loaded = Repository.Load(path)!;
+
+        Assert.Equal(1.18, loaded.Piles[0].ConcreteFactor);
+        Assert.Null(loaded.Piles[1].ConcreteFactor);
+        Assert.DoesNotContain("\"ConcreteFactor\": null", File.ReadAllText(path));
+    }
+
     /// <summary>
     /// A test build is given its own folder so it can never write over the real
     /// journal in %APPDATA%.

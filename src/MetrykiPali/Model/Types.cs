@@ -31,6 +31,14 @@ public sealed class Pile
     /// Set from the work journal; drives the DATA field of the metryka page.
     /// </summary>
     public DateTime? Executed { get; set; }
+
+    /// <summary>
+    /// The overbreak coefficient this pile's concrete was worked out with, fixed
+    /// when the pile is logged to a day - every day can have its own, and
+    /// changing the coefficient field later must not rewrite a day already on
+    /// paper. Null while the pile is outstanding: it then follows the field.
+    /// </summary>
+    public double? ConcreteFactor { get; set; }
 }
 
 /// <summary>A day of work: every pile poured on one date.</summary>
@@ -47,6 +55,10 @@ public sealed class JournalEntry
     public string Pale { get; set; } = "";
     public int Ilosc { get; set; }
     public double Beton { get; set; }
+
+    /// <summary>The day's concrete coefficient; the one column the user may edit.</summary>
+    public double Wsp { get; set; }
+
     public int Strony { get; set; }
 }
 
@@ -79,7 +91,12 @@ public sealed class MetrykaSettings
 /// </summary>
 public sealed class ProjectState
 {
-    public int Version { get; set; } = 1;
+    /// <summary>
+    /// 2: piles carry their own <see cref="Pile.ConcreteFactor"/>. A version 1
+    /// file has none; its logged piles are given the project's coefficient on
+    /// load, which is the one their stored volumes were computed with.
+    /// </summary>
+    public int Version { get; set; } = 2;
     public string? SourcePath { get; set; }
     public MetrykaSettings Settings { get; set; } = new();
     public List<PileRange> Ranges { get; set; } = new();
