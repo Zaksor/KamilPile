@@ -53,6 +53,8 @@ public sealed class MainPresenter
         _view.DayFactorEdited += (_, edit) => DayFactorEdited(edit);
         _view.DayConcreteEdited += (_, edit) => DayConcreteEdited(edit);
         _view.ConcreteModeChanged += (_, _) => ConcreteModeChanged();
+        _view.ThemeChanged += (_, _) => RememberTheme();
+        _view.JournalOrderChanged += (_, _) => { RefreshJournal(); SaveQuietly(); };
         _view.MissingMetrykiRequested += (_, _) => ShowMissingMetryki();
         _view.FooterImageRequested += (_, _) => ChooseFooterImage();
         _view.FooterImageCleared += (_, _) => ClearFooterImage();
@@ -83,6 +85,8 @@ public sealed class MainPresenter
     /// </summary>
     public void Start()
     {
+        _view.Theme = _repository.Theme == ThemeDark ? AppTheme.Dark : AppTheme.Light;
+
         var sites = _repository.ListSites();
         if (sites.Count == 0)
         {
@@ -110,6 +114,14 @@ public sealed class MainPresenter
 
         TryRemember(name);
         _view.ShowSites(_repository.ListSites(), name);
+    }
+
+    private const string ThemeLight = "Jasny", ThemeDark = "Ciemny";
+
+    private void RememberTheme()
+    {
+        try { _repository.Theme = _view.Theme == AppTheme.Dark ? ThemeDark : ThemeLight; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* only a convenience */ }
     }
 
     private void TryRemember(string name)
@@ -145,6 +157,7 @@ public sealed class MainPresenter
             _view.FooterImagePosition = s.FooterImagePosition;
             _view.FooterImageLabel = FooterImageLabel(s);
             _view.ConcreteMode = s.ConcreteMode;
+            _view.JournalNewestFirst = s.JournalNewestFirst;
             _view.JournalConcreteUsed = null;
             _view.JournalDate = s.Data == default ? DateTime.Today : s.Data;
 
@@ -286,12 +299,11 @@ public sealed class MainPresenter
         var how = _journal.ConcreteUsedOf(plan.Date) is { } total
             ? $"beton zużyty {total:0.00} m³"
             : _view.ConcreteMode == ConcreteMode.Measured
-                ? "wpisz ilość zużytego betonu w kolumnie \"Zużyto\""
+                ? "wpisz ilość zużytego betonu w kolumnie \"Zużyto\" w dzienniku"
                 : $"wsp. betonu {_journal.FactorOf(plan.Date):0.00}";
 
         _view.StatusText = $"Dodano {added} pali do dnia {plan.Date:dd.MM.yyyy} ({how})." +
-                           (plan.Moved.Count > 0 ? $" Przeniesiono {plan.Moved.Count}." : "") +
-                           $"   |   {Summary()}";
+                           (plan.Moved.Count > 0 ? $" Przeniesiono {plan.Moved.Count}." : "");
         return true;
     }
 
@@ -316,7 +328,7 @@ public sealed class MainPresenter
 
     private void RefreshJournal()
     {
-        _view.ShowJournal(_journal.Entries(_view.PilesPerPage));
+        _view.ShowJournal(_journal.Entries(_view.PilesPerPage, _view.JournalNewestFirst));
         _view.RefreshPiles();
         _view.CanGenerate = _journal.Assigned > 0;
 
@@ -512,7 +524,7 @@ public sealed class MainPresenter
 
         SaveQuietly();
         _view.StatusText = _view.ConcreteMode == ConcreteMode.Measured
-            ? "Beton z ilości zużytej: przy wpisywaniu dnia podaj ile betonu zużyto (albo wpisz to później w kolumnie \"Zużyto\"). " +
+            ? "Beton z ilości zużytej: przy wpisywaniu dnia podaj ilość betonu w karcie BETON (albo wpisz ją później w kolumnie \"Zużyto\"). " +
               "Program rozdzieli go na pale według ich objętości."
             : "Beton ze współczynnika: objętość teoretyczna × współczynnik dnia.";
     }
@@ -642,7 +654,7 @@ public sealed class MainPresenter
 
         SaveQuietly();
         OpenSite(name);
-        _view.StatusText = $"Otwarto budowę \"{name}\".   |   {Summary()}";
+        _view.StatusText = $"Otwarto budowę \"{name}\".";
     }
 
     /// <summary>
@@ -673,6 +685,7 @@ public sealed class MainPresenter
                 FooterImageName = current.FooterImageName,
                 FooterImagePosition = current.FooterImagePosition,
                 ConcreteMode = current.ConcreteMode,
+                JournalNewestFirst = current.JournalNewestFirst,
                 ConcreteFactor = current.ConcreteFactor,
                 PilesPerPage = current.PilesPerPage,
                 Format = current.Format
@@ -802,6 +815,7 @@ public sealed class MainPresenter
         s.Firma = _view.FooterText.Trim();
         s.FooterImagePosition = _view.FooterImagePosition;
         s.ConcreteMode = _view.ConcreteMode;
+        s.JournalNewestFirst = _view.JournalNewestFirst;
         s.Data = _view.JournalDate.Date;
     }
 
@@ -828,13 +842,35 @@ public sealed class MainPresenter
 
     // --------------------------------------------------------------- status
 
-    private string Summary() =>
-        $"Pale: {_journal.Total}   |   W dzienniku: {_journal.Assigned}   |   " +
-        $"Bez daty: {_journal.Outstanding}   |   Dni: {_journal.Days().Count}   |   " +
-        $"Strony: {_journal.Entries(_view.PilesPerPage).Sum(e => e.Strony)}";
+    /// <summary>
+    /// The counts and progress of the open site. The theoretical volumes are
+    /// pure geometry - diameter and design length, no coefficient - so the
+    /// concrete bar measures progress against what the schedule itself implies.
+    /// </summary>
+    private SiteProgress Progress()
+    {
+        var piles = _project.Piles;
+        var logged = piles.Where(p => p.Executed is not null).ToList();
+        var missing = _journal.Missing();
 
+        return new SiteProgress(
+            Ranges: _project.Ranges.Count,
+            Piles: piles.Count,
+            Logged: logged.Count,
+            Days: _journal.Days().Count,
+            Pages: _journal.Entries(_view.PilesPerPage).Sum(e => e.Strony),
+            VolumeAll: Math.Round(piles.Sum(p => PileMath.TheoreticalVolume(p.Diameter, p.DesignLength)), 2),
+            VolumeLogged: Math.Round(logged.Sum(p => PileMath.TheoreticalVolume(p.Diameter, p.DesignLength)), 2),
+            ConcreteLogged: Math.Round(logged.Sum(p => p.Concrete), 2),
+            WithoutMetryka: missing.Undated.Count + missing.Days.Sum(d => d.Numbers.Count));
+    }
+
+    /// <summary>The counts go to the progress display; the status line is left for messages.</summary>
     private void UpdateStatus()
-        => _view.StatusText = _journal.Total == 0
+    {
+        _view.ShowProgress(Progress());
+        _view.StatusText = _journal.Total == 0
             ? "Wczytaj tabelkę z palami, aby rozpocząć."
-            : Summary() + (_lastOutput is null ? "" : $"   |   Zapisano: {Path.GetFileName(_lastOutput)}");
+            : _lastOutput is null ? "" : $"Ostatnio zapisano: {Path.GetFileName(_lastOutput)}";
+    }
 }

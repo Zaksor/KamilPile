@@ -79,9 +79,18 @@ internal static class ExcelFooterPicture
 
     private static string FooterText(MetrykaSettings s)
     {
+        // A whole company footer: in the middle, with the text and the page
+        // number on a line above it ("\n" is a line break in Excel's footer).
+        if (FooterImage.IsWide(s.FooterImage!))
+            return $"&C{WideCaption(Escape(s.Firma), "&P")}\n&G";
+
         var (left, center, right) = Sections(s, "&G", Escape(s.Firma), "&P");
         return $"&L{left}&C{center}&R{right}";
     }
+
+    /// <summary>The line above a wide footer picture: "text  ·  strona N", or just the page.</summary>
+    public static string WideCaption(string text, string pageNumber)
+        => string.IsNullOrWhiteSpace(text) ? $"strona {pageNumber}" : $"{text}   ·   strona {pageNumber}";
 
     /// <summary>"&amp;" starts a code in Excel's header text; a literal one is doubled.</summary>
     private static string Escape(string text) => text.Replace("&", "&&");

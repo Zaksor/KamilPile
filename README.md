@@ -115,6 +115,25 @@ same pile number twice.
 The app expands the ranges into individual piles — `1–10` becomes ten piles — and
 works out the concrete for each.
 
+### The window
+
+Top bar: the **Budowa** picker (its list ends with **➕ Nowa budowa…**), **Nowa
+budowa**, **Więcej** (rename, add from a file, save a copy, data folder) and the
+**Jasny | Ciemny** switch — a light and a dark look, remembered on the computer.
+
+Three cards: **DANE BUDOWY** (the header printed on the metryki and the footer
+with its logo), **BETON** (how concrete is worked out — the field the chosen
+method uses is the one that can be typed in — and the plant), and **TABELKA Z
+PALAMI** (the loaded schedule, and two progress bars: piles in the journal, and
+concrete — the journal's "Zużyto" total against the schedule's pure geometric
+volume, diameter and design length with no coefficient). Below them the journal
+with the entry row, and a bottom bar with the counts, the piles still without a
+metryka, and the generate buttons.
+
+Text fields grow while you type when the text is longer than the field, and
+after Enter (or leaving the field) go back to their size, showing the text from
+its beginning; Enter also moves on to the next field.
+
 ### Step 2 — check the header
 
 **Budowa**, **Wykonawca**, **Metoda**, **Betoniarnia** are printed on every page.
@@ -122,10 +141,14 @@ They come pre-filled; correct them once and they are remembered.
 
 **Stopka (tekst)** is printed bottom left of every page (the company name by
 default). **Obraz w stopce** adds a picture — a logo, a stamp — from a JPG, PNG,
-BMP, GIF or TIFF file, printed about 1 cm tall, **po lewej**, **na środku** or
-**po prawej**. The picture takes that part of the footer: on the left it moves
-the text to the middle, on the right it moves the page number there. It is kept
-inside the site's file, so it travels with the site; **Usuń** takes it off.
+BMP, GIF or TIFF file. It prints at the size it was designed for — its pixels
+over its dpi — made smaller only to fit between the side margins (about 17 cm)
+and within 3 cm of height; a company footer made for A4 at 300 dpi therefore
+runs across the page. A small logo goes **po lewej**, **na środku** or **po
+prawej** and takes that part of the footer (on the left it moves the text to the
+middle, on the right the page number). A picture wider than half the page takes
+the middle, with the text and page number on a line above it. It is kept inside
+the site's file, so it travels with the site; **Usuń** takes it off.
 
 ### Step 3 — log each day's work
 
@@ -141,10 +164,16 @@ Write ranges and single numbers separated by commas, semicolons or spaces —
 
 The **Dziennik (dni)** tab then shows one line per day:
 
-| Data | Pale | Ilość | Beton [m³] | Wsp. betonu | Stron | Metryki wygenerowane |
+| Data ▲ | Pale | Ilość | Wsp. | Zużyto [m³] | Stron | Metryki |
 |---|---|---|---|---|---|---|
-| 12.09.2022 | 1-10, 17-18 | 12 | 14.02 | 1,30 | 1 | 12.09.2022 |
-| 13.09.2022 | 11-16, 63-66, 77-84 | 18 | 24.18 | 1,30 | 2 | nie |
+| 12.09.2022 | 1-10, 17-18 | 12 | 1,30 | 14,02 | 1 | ✓ 12.09.2022 |
+| 13.09.2022 | 11-16, 63-66, 77-84 | 18 | 1,34 | **24,60** | 2 | nie |
+
+A click on **Data** lists the newest day first (▼) or the oldest (▲); it is
+remembered with the site, and the metryki are always written in date order.
+
+**Zużyto** is the day's concrete: worked out from the coefficient, or — in
+bold — the figure typed in from the delivery notes (see section 5).
 
 **Metryki wygenerowane** shows when a day's metryki were written: a date,
 **nie**, or **częściowo** when piles were added to the day afterwards. A day
@@ -407,6 +436,7 @@ src/MetrykiPali/
     MainPresenter.cs          all of the behaviour
   Views/
     MainForm.cs               the window — controls and events only
+    Ui.cs, Theme.cs           the window's own controls and its light and dark colours
 tests/MetrykiPali.Tests/
   fixtures/                   sample schedules in every supported format
 publish.ps1                   builds the standalone offline .exe
@@ -420,7 +450,7 @@ publish.ps1                   builds the standalone offline .exe
 dotnet test
 ```
 
-**277 tests** on xUnit v3, a few seconds, no window and no network.
+**281 tests** on xUnit v3, a few seconds, no window and no network.
 
 | Suite | What it covers |
 |---|---|

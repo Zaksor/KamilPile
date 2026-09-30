@@ -77,8 +77,15 @@ public sealed class JournalEntry
     /// </summary>
     public double Wsp { get; set; }
 
-    /// <summary>The concrete used that day, m3, or null when the coefficient applies.</summary>
+    /// <summary>
+    /// The concrete used that day, m3: the figure typed in when the day is
+    /// worked out from it, otherwise what the coefficient gives (the day's
+    /// total). Nullable only so a cleared cell can say "back to the coefficient".
+    /// </summary>
     public double? Zuzyto { get; set; }
+
+    /// <summary>The day's concrete was typed in (from the delivery notes), not worked out.</summary>
+    public bool Mierzone { get; set; }
 
     public int Strony { get; set; }
 
@@ -112,6 +119,9 @@ public sealed class MetrykaSettings
     /// <summary>How a newly logged day's concrete is worked out.</summary>
     public ConcreteMode ConcreteMode { get; set; } = ConcreteMode.Factor;
 
+    /// <summary>The journal lists the newest day first (flipped by clicking the Data header).</summary>
+    public bool JournalNewestFirst { get; set; }
+
     /// <summary>Date proposed in the journal entry box; not written to the metryki.</summary>
     public DateTime Data { get; set; } = DateTime.Today;
 
@@ -126,6 +136,26 @@ public sealed class MetrykaSettings
 
     /// <summary>The file type the metryki were last generated as; offered again next time.</summary>
     public MetrykaFormat Format { get; set; } = MetrykaFormat.Xlsx;
+}
+
+/// <summary>
+/// Where a site stands: the counts under the journal and the two progress bars
+/// on the schedule card.
+/// </summary>
+/// <param name="Ranges">Rows of the loaded schedule.</param>
+/// <param name="Piles">Piles in the schedule.</param>
+/// <param name="Logged">Piles with a pour date.</param>
+/// <param name="Days">Days in the journal.</param>
+/// <param name="Pages">Metryka pages the journal would print.</param>
+/// <param name="VolumeAll">Theoretical (geometric) volume of every pile in the schedule, m3 - no coefficient.</param>
+/// <param name="VolumeLogged">The same for the piles with a pour date.</param>
+/// <param name="ConcreteLogged">The concrete recorded for the piles with a pour date, m3.</param>
+/// <param name="WithoutMetryka">Piles still without a current metryka.</param>
+public sealed record SiteProgress(
+    int Ranges, int Piles, int Logged, int Days, int Pages,
+    double VolumeAll, double VolumeLogged, double ConcreteLogged, int WithoutMetryka)
+{
+    public int Undated => Piles - Logged;
 }
 
 /// <summary>How the concrete of a day's piles is worked out.</summary>

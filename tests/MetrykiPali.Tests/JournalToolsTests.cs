@@ -135,6 +135,48 @@ public sealed class JournalToolsTests : IDisposable
         Assert.Equal(DateTime.Today.ToString("dd.MM.yyyy"), next.Journal[0].Metryki);
     }
 
+    // ------------------------------------------------------------ journal order
+
+    [Fact]
+    public void The_journal_can_list_the_newest_day_first_and_remembers_it()
+    {
+        _view.LogDay(D12, "1-5");
+        _view.LogDay(D13, "6-10");
+        Assert.Equal(new[] { D12, D13 }, _view.Journal.Select(e => e.Data));
+
+        _view.ChangeJournalOrder(newestFirst: true);
+        Assert.Equal(new[] { D13, D12 }, _view.Journal.Select(e => e.Data));
+
+        var next = new FakeMainView();
+        new MainPresenter(next, _reader, _writer, _repository).Start();
+        Assert.True(next.JournalNewestFirst);
+        Assert.Equal(new[] { D13, D12 }, next.Journal.Select(e => e.Data));
+    }
+
+    [Fact]
+    public void The_order_on_screen_does_not_change_the_order_of_the_metryki()
+    {
+        _view.LogDay(D12, "1-5");
+        _view.LogDay(D13, "6-10");
+        _view.ChangeJournalOrder(newestFirst: true);
+
+        _view.ClickGenerate();
+
+        Assert.Equal(new[] { D12, D13 }, _writer.Days.Select(d => d.Date));
+    }
+
+    [Fact]
+    public void A_day_on_the_coefficient_shows_its_concrete_as_used_too()
+    {
+        _view.LogDay(D12, "1-12");                        // 12 × Ø 0.4 × 7 m at 1.30
+
+        var entry = _view.Journal[0];
+        Assert.False(entry.Mierzone);
+        Assert.Equal(Math.Round(12 * PileMath.Concrete(0.4, 7, 1.30), 2), entry.Zuzyto);
+        Assert.Equal(entry.Beton, entry.Zuzyto);
+        Assert.Equal(entry.Zuzyto, _view.Progress!.ConcreteLogged);
+    }
+
     // ------------------------------------------------------------------ footer
 
     private string MakeImage(string name, int width = 300, int height = 100)
@@ -191,10 +233,77 @@ public sealed class JournalToolsTests : IDisposable
     [Fact]
     public void A_large_picture_is_scaled_down_and_stored_as_png()
     {
-        var png = FooterImage.Prepare(MakeImage("duze.jpg", 3000, 1500));
+        var png = FooterImage.Prepare(MakeImage("duze.jpg", 6000, 1500));
 
         Assert.Equal(new byte[] { 0x89, 0x50, 0x4E, 0x47 }, png.Take(4));
-        Assert.Equal((600, FooterImage.MaxHeightPixels), FooterImage.Size(png));
+        Assert.Equal((FooterImage.MaxPixels, 750), FooterImage.Size(png));
+    }
+
+    private string MakeImage(string name, int width, int height, float dpi)
+    {
+        var path = Path.Combine(_dir, name);
+        using var bitmap = new Bitmap(width, height);
+        bitmap.SetResolution(dpi, dpi);
+        using (var g = Graphics.FromImage(bitmap)) g.Clear(Color.SteelBlue);
+        bitmap.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+        return path;
+    }
+
+    /// <summary>
+    /// A company footer made for A4 at 300 dpi (2480 × 413 px, 21 × 3.5 cm)
+    /// prints across the page between the margins, not shrunk to a small logo.
+    /// </summary>
+    [Fact]
+    public void A_footer_designed_for_the_page_prints_across_it_at_its_own_proportions()
+    {
+        var png = FooterImage.Prepare(MakeImage("stopka.png", 2480, 413, 300));
+
+        var (w, h) = FooterImage.PrintedSize(png);
+
+        Assert.Equal(FooterImage.MaxPrintedWidthPoints, w, 1);
+        Assert.Equal(FooterImage.MaxPrintedWidthPoints * 413 / 2480, h, 1);
+        Assert.True(FooterImage.IsWide(png));
+    }
+
+    [Fact]
+    public void A_small_logo_prints_at_its_own_size_and_a_tall_one_is_held_to_three_centimetres()
+    {
+        var small = FooterImage.PrintedSize(FooterImage.Prepare(MakeImage("male.png", 300, 100, 300)));
+        Assert.Equal((72.0, 24.0), (Math.Round(small.Width, 1), Math.Round(small.Height, 1)));   // 1 × 1/3 inch
+
+        var tall = FooterImage.PrintedSize(FooterImage.Prepare(MakeImage("wysokie.png", 600, 600, 96)));
+        Assert.Equal(FooterImage.MaxPrintedHeightPoints, tall.Height, 1);
+        Assert.Equal(tall.Height, tall.Width, 1);
+    }
+
+    [Fact]
+    public void A_wide_footer_takes_the_middle_with_text_and_page_number_above_it()
+    {
+        var path = Path.Combine(_dir, "szeroka.xlsx");
+        var png = FooterImage.Prepare(MakeImage("stopka.png", 2480, 413, 300));
+
+        TestServices.Writer.Write(path, new[] { OneDay() }, WithPicture(png, FooterPosition.Left));
+
+        using var zip = ZipFile.OpenRead(path);
+        using var reader = new StreamReader(zip.GetEntry("xl/worksheets/sheet1.xml")!.Open());
+        var footer = System.Text.RegularExpressions.Regex.Match(reader.ReadToEnd(), "<x:oddFooter>(.*?)</x:oddFooter>",
+            System.Text.RegularExpressions.RegexOptions.Singleline).Groups[1].Value.Replace("\r", "");
+        Assert.Equal("&amp;CFirma &amp;&amp; Syn   ·   strona &amp;P\n&amp;G", footer);
+    }
+
+    [Fact]
+    public void The_pdf_draws_a_wide_footer_across_the_page()
+    {
+        var path = Path.Combine(_dir, "szeroka.pdf");
+        var png = FooterImage.Prepare(MakeImage("stopka.png", 2480, 413, 300));
+
+        new MetrykaPdfWriter().Write(path, new[] { OneDay() }, WithPicture(png, FooterPosition.Center));
+
+        using var pdf = PdfDocument.Open(path);
+        var page = pdf.GetPage(1);
+        var image = Assert.Single(page.GetImages());
+        Assert.Equal(FooterImage.MaxPrintedWidthPoints, image.BoundingBox.Width, 0);
+        Assert.Contains("strona", string.Join(" ", page.GetWords().Select(w => w.Text)));
     }
 
     private static MetrykaSettings WithPicture(byte[] png, FooterPosition position) => new()
