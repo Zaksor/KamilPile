@@ -10,7 +10,9 @@ namespace MetrykiPali.Services;
 
 /// <summary>
 /// Reads the source table ("tabelka z palami") from .xlsx / .xls / .csv / .pdf.
-/// Expected columns: od | do | średnica | długość | zbrojenie.
+/// A spreadsheet holding a designer's summary table is read by its headers
+/// (<see cref="DesignerTable"/>); otherwise, and for .csv and .pdf, the columns
+/// are expected as od | do | średnica [m] | długość | zbrojenie.
 /// </summary>
 public sealed class PileTableReader : IScheduleReader
 {
@@ -27,8 +29,9 @@ public sealed class PileTableReader : IScheduleReader
 
         if (ranges.Count == 0)
             throw new InvalidDataException(
-                "Nie znaleziono żadnych zakresów pali. Oczekiwane kolumny: " +
-                "numer od | numer do | średnica | długość pala | zbrojenie.");
+                "Nie znaleziono żadnych zakresów pali. Tabelka powinna mieć nagłówki " +
+                "\"NR PALI\", \"ŚREDNICA\" i \"DŁUGOŚĆ 1 PALA\" (zbrojenie opcjonalnie), " +
+                "albo kolumny: numer od | numer do | średnica | długość pala | zbrojenie.");
 
         return ranges;
     }
@@ -37,36 +40,90 @@ public sealed class PileTableReader : IScheduleReader
 
     private static List<PileRange> ReadExcel(string path)
     {
-        // ClosedXML reads the Open XML formats only. A real .xls is a completely
-        // different (BIFF) file and makes it throw ArgumentException, so say so
-        // plainly instead of letting that escape.
-        if (Path.GetExtension(path).Equals(".xls", StringComparison.OrdinalIgnoreCase))
-            throw new NotSupportedException(
-                "Pliki .xls (Excel 97-2003) nie są obsługiwane. Otwórz plik w Excelu " +
-                "i zapisz go jako .xlsx, albo wyeksportuj do .csv.");
-
         // Copy first: the source file is often open in Excel / synced by OneDrive,
         // both of which hold a lock that would make a direct open fail.
         var temp = Path.Combine(Path.GetTempPath(), $"metryki_{Guid.NewGuid():N}{Path.GetExtension(path)}");
         File.Copy(path, temp, overwrite: true);
         try
         {
-            using var wb = OpenWorkbook(temp);
+            // ClosedXML reads the Open XML formats only; a real .xls is the older
+            // BIFF format, which designers still send, and ExcelDataReader reads it.
+            var sheets = Path.GetExtension(path).Equals(".xls", StringComparison.OrdinalIgnoreCase)
+                ? LegacyExcel.ReadSheets(temp)
+                : OpenXmlSheets(temp);
 
             // Take the first sheet that actually holds a schedule. Real project
             // files often lead with a cover sheet, and the table sits behind it.
-            foreach (var ws in wb.Worksheets)
+            InvalidDataException? refusal = null;
+            foreach (var sheet in sheets)
             {
-                var result = ReadWorksheet(ws);
-                if (result.Count > 0) return result;
+                try
+                {
+                    var result = ReadGrid(sheet);
+                    if (result.Count > 0) return result;
+                }
+                catch (InvalidDataException ex)
+                {
+                    refusal ??= ex;   // a sheet recognised but unusable; another may still do
+                }
             }
 
+            if (refusal is not null) throw refusal;
             return new List<PileRange>();
         }
         finally
         {
             try { File.Delete(temp); } catch { /* best effort */ }
         }
+    }
+
+    /// <summary>
+    /// One sheet, as the text of its cells. A designer's summary table is read
+    /// by its headers; failing that, the first five columns are taken as
+    /// od | do | średnica | długość | zbrojenie.
+    /// </summary>
+    private static List<PileRange> ReadGrid(IReadOnlyList<IReadOnlyList<string>> grid)
+    {
+        if (grid.Count == 0) return new List<PileRange>();
+
+        var designed = DesignerTable.TryRead(grid);
+        if (designed is { Count: > 0 }) return designed;
+
+        var result = new List<PileRange>();
+        var left = FirstUsedColumn(grid);
+        foreach (var row in grid)
+        {
+            string At(int i) => left + i < row.Count ? row[left + i] : "";
+            var range = TryBuildRange(At(0), At(1), At(2), At(3), At(4));
+            if (range is not null) result.Add(range);
+        }
+        return result;
+    }
+
+    private static int FirstUsedColumn(IReadOnlyList<IReadOnlyList<string>> grid)
+    {
+        var first = int.MaxValue;
+        foreach (var row in grid)
+            for (var c = 0; c < Math.Min(row.Count, first); c++)
+                if (!string.IsNullOrWhiteSpace(row[c])) { first = c; break; }
+        return first == int.MaxValue ? 0 : first;
+    }
+
+    private static List<IReadOnlyList<IReadOnlyList<string>>> OpenXmlSheets(string path)
+    {
+        using var wb = OpenWorkbook(path);
+        return wb.Worksheets.Select(ws => (IReadOnlyList<IReadOnlyList<string>>)SheetGrid(ws)).ToList();
+    }
+
+    private static List<IReadOnlyList<string>> SheetGrid(IXLWorksheet worksheet)
+    {
+        var used = worksheet.RangeUsed();
+        if (used is null) return new List<IReadOnlyList<string>>();
+
+        var width = used.ColumnCount();
+        return used.Rows()
+            .Select(row => (IReadOnlyList<string>)Enumerable.Range(1, width).Select(i => CellText(row.Cell(i))).ToList())
+            .ToList();
     }
 
     /// <summary>
@@ -87,22 +144,6 @@ public sealed class PileTableReader : IScheduleReader
                 "Nie udało się otworzyć tego pliku jako skoroszytu Excela. " +
                 "Plik może być uszkodzony lub zapisany w innym formacie.", ex);
         }
-    }
-
-    private static List<PileRange> ReadWorksheet(IXLWorksheet worksheet)
-    {
-        var result = new List<PileRange>();
-
-        foreach (var row in worksheet.RangeUsed()?.RowsUsed() ?? Enumerable.Empty<IXLRangeRow>())
-        {
-            var cells = Enumerable.Range(1, 5).Select(i => row.Cell(i)).ToArray();
-            var range = TryBuildRange(
-                CellText(cells[0]), CellText(cells[1]),
-                CellText(cells[2]), CellText(cells[3]), CellText(cells[4]));
-            if (range is not null) result.Add(range);
-        }
-
-        return result;
     }
 
     private static string CellText(IXLCell cell)

@@ -75,6 +75,43 @@ public class MainPresenterTests
     }
 
     [Fact]
+    public void A_schedule_with_a_pile_number_used_twice_is_refused_and_nothing_changes()
+    {
+        LoadSchedule();
+        _view.LogDay(D12, "1-12");
+        var reader = new StubScheduleReader((1, 12, 0.4, 7), (10, 20, 0.4, 8));
+        var view = new FakeMainView { SchedulePath = @"C:\budowa\zla.xlsx" };
+        new MainPresenter(view, reader, _writer, _repository).Start();
+
+        view.ClickLoadSchedule();
+
+        Assert.Contains(view.Errors, e => e.Contains("więcej niż raz") && e.Contains("10-12"));
+        Assert.Equal(36, view.Piles.Count);          // the previous schedule, untouched
+        Assert.Single(view.Journal);
+    }
+
+    [Fact]
+    public void Gaps_in_the_schedules_numbering_are_pointed_out()
+    {
+        var reader = new StubScheduleReader((1, 10, 0.4, 7), (12, 20, 0.4, 8), (26, 30, 0.4, 8));
+        var view = new FakeMainView { SchedulePath = @"C:\budowa\tabelka.xls" };
+        new MainPresenter(view, reader, _writer, new InMemoryProjectRepository()).Start();
+
+        view.ClickLoadSchedule();
+
+        Assert.Equal(24, view.Piles.Count);
+        Assert.Contains(view.Infos, i => i.StartsWith("Brakujące numery pali") && i.Contains("11, 21-25"));
+    }
+
+    [Fact]
+    public void A_schedule_numbered_without_gaps_loads_without_a_question()
+    {
+        LoadSchedule();
+
+        Assert.Empty(_view.Infos);
+    }
+
+    [Fact]
     public void Loading_computes_the_concrete_volumes()
     {
         LoadSchedule();

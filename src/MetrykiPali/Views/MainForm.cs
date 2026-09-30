@@ -301,10 +301,8 @@ public sealed class MainForm : Form, IMainView
         using var dialog = new OpenFileDialog
         {
             Title = "Wybierz tabelkę z palami",
-            // .xls is deliberately absent: the Excel reader handles Open XML only,
-            // and offering a format that cannot be read is worse than not offering it.
-            Filter = "Wszystkie obsługiwane (*.xlsx;*.xlsm;*.csv;*.pdf)|*.xlsx;*.xlsm;*.csv;*.pdf|" +
-                     "Excel (*.xlsx;*.xlsm)|*.xlsx;*.xlsm|CSV (*.csv)|*.csv|PDF (*.pdf)|*.pdf"
+            Filter = "Wszystkie obsługiwane (*.xlsx;*.xls;*.xlsm;*.csv;*.pdf)|*.xlsx;*.xls;*.xlsm;*.csv;*.pdf|" +
+                     "Excel (*.xlsx;*.xls;*.xlsm)|*.xlsx;*.xls;*.xlsm|CSV (*.csv)|*.csv|PDF (*.pdf)|*.pdf"
         };
         return dialog.ShowDialog(this) == DialogResult.OK ? dialog.FileName : null;
     }

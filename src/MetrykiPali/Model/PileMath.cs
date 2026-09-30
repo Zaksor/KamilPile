@@ -37,6 +37,32 @@ public static class PileSchedule
     }
 
     /// <summary>
+    /// Pile numbers that more than one row of the schedule claims. The journal
+    /// keys piles by number, so a schedule like that cannot be loaded.
+    /// </summary>
+    public static List<int> DuplicateNumbers(IEnumerable<PileRange> ranges) => ranges
+        .SelectMany(r => Enumerable.Range(r.From, r.Count))
+        .GroupBy(n => n)
+        .Where(g => g.Count() > 1)
+        .Select(g => g.Key)
+        .OrderBy(n => n)
+        .ToList();
+
+    /// <summary>
+    /// Numbers between the first and the last pile that no row covers. Often
+    /// deliberate (piles dropped from the design), but worth a look.
+    /// </summary>
+    public static List<int> MissingNumbers(IEnumerable<PileRange> ranges)
+    {
+        var numbers = ranges.SelectMany(r => Enumerable.Range(r.From, r.Count)).ToHashSet();
+        if (numbers.Count == 0) return new List<int>();
+
+        return Enumerable.Range(numbers.Min(), numbers.Max() - numbers.Min() + 1)
+            .Where(n => !numbers.Contains(n))
+            .ToList();
+    }
+
+    /// <summary>
     /// Carries pour dates from a previous pile list onto a freshly loaded one,
     /// matching by pile number. Reloading a corrected schedule must not discard
     /// the journal - it can represent weeks of site records. The day's concrete

@@ -120,6 +120,16 @@ public sealed class MainPresenter
             CaptureSettings();
 
             var ranges = _reader.Read(path).ToList();
+
+            var duplicates = PileSchedule.DuplicateNumbers(ranges);
+            if (duplicates.Count > 0)
+            {
+                _view.ShowError("Powtarzające się numery pali",
+                    $"Te numery pali występują w tabelce więcej niż raz:\n{PileNumbers.Format(duplicates)}\n\n" +
+                    "Każdy pal musi mieć własny numer. Popraw tabelkę i wczytaj ją ponownie.");
+                return;
+            }
+
             var fresh = PileSchedule.Expand(ranges, _project.Settings);
             var kept = PileSchedule.CarryOverDates(_project.Piles, fresh);
 
@@ -133,6 +143,12 @@ public sealed class MainPresenter
             _view.StatusText = kept > 0
                 ? $"Wczytano {ranges.Count} zakresów. Zachowano daty dla {kept} pali."
                 : $"Wczytano {ranges.Count} zakresów ({fresh.Count} pali).";
+
+            var missing = PileSchedule.MissingNumbers(ranges);
+            if (missing.Count > 0)
+                _view.ShowInfo("Brakujące numery pali",
+                    $"Wczytano {fresh.Count} pali, ale w tabelce nie ma numerów:\n{PileNumbers.Format(missing)}\n\n" +
+                    "Jeśli projektant celowo ich pominął, nic nie trzeba robić.");
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or NotSupportedException or UnauthorizedAccessException)
         {
