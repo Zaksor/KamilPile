@@ -15,6 +15,7 @@ internal sealed class FakeMainView : IMainView
     public string Betoniarnia { get; set; } = "Bosta";
     public double ConcreteFactor { get; set; } = 1.30;
     public int PilesPerPage { get; set; } = 12;
+    public MetrykaFormat OutputFormat { get; set; } = MetrykaFormat.Xlsx;
     public DateTime JournalDate { get; set; } = new(2022, 9, 12);
     public string JournalPiles { get; set; } = "";
     public string StatusText { get; set; } = "";
@@ -116,6 +117,11 @@ internal sealed class FakeMainView : IMainView
     public void ChangeSiteDetails(string budowa)
     {
         Budowa = budowa;
+        SettingsChanged?.Invoke(this, EventArgs.Empty);
+    }
+    public void ChangeOutputFormat(MetrykaFormat format)
+    {
+        OutputFormat = format;
         SettingsChanged?.Invoke(this, EventArgs.Empty);
     }
     public void ChangeConcretePlant(string value)

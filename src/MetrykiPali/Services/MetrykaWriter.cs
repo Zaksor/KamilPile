@@ -11,23 +11,36 @@ namespace MetrykiPali.Services;
 /// </summary>
 public sealed class MetrykaWriter : IMetrykaWriter
 {
-    private const int RowsPerBlock = 48;
-    private const int FirstDataColumn = 2;   // B
-    private const int LastDataColumn = 13;   // M
+    // The page layout, shared with MetrykaPdfWriter so both formats print alike.
+    internal const int RowsPerBlock = 48;
+    internal const int FirstDataColumn = 2;   // B
+    internal const int LastDataColumn = 13;   // M
 
     // Row offsets inside a block, relative to the block base row.
-    private const int OffRule = 1;        // 1..2   thin rule under the page header
-    private const int OffTitle = 3;       // 3..4   "METRYKA PALI"
-    private const int OffMetoda = 6;      // 6..7
-    private const int OffWykonawca = 8;   // 8..9
-    private const int OffBudowa = 10;     // 10..11
-    private const int OffData = 12;       // 12
-    private const int OffTable = 15;      // 15..35, seven 3-row bands
-    private const int OffUwagi = 39;      // 39..43
-    private const int OffKierownik = 46;  // 46..47
+    internal const int OffRule = 1;        // 1..2   thin rule under the page header
+    internal const int OffTitle = 3;       // 3..4   "METRYKA PALI"
+    internal const int OffMetoda = 6;      // 6..7
+    internal const int OffWykonawca = 8;   // 8..9
+    internal const int OffBudowa = 10;     // 10..11
+    internal const int OffData = 12;       // 12
+    internal const int OffTable = 15;      // 15..35, seven 3-row bands
+    internal const int OffUwagi = 39;      // 39..43
+    internal const int OffKierownik = 46;  // 46..47
 
-    private const int BandHeight = 3;
-    private const int BandCount = 7;
+    internal const int BandHeight = 3;
+    internal const int BandCount = 7;
+
+    /// <summary>The row captions of the pile table, top to bottom.</summary>
+    internal static readonly string[] BandLabels =
+    {
+        "Numer pala",
+        "Średnica pala [m]",
+        "Długość pala wg projektu [m]",
+        "Długość wykonanego pala [m]",
+        "Ilość betonu wbudowanego [m3]",
+        "Beton z betoniarni:",
+        "Zbrojenie:"
+    };
 
     /// <summary>
     /// Writes one workbook covering every day in the journal. Days are ordered by
@@ -145,24 +158,13 @@ public sealed class MetrykaWriter : IMetrykaWriter
 
     private static void WriteTable(IXLWorksheet ws, int baseRow, IReadOnlyList<Pile> piles)
     {
-        var labels = new[]
-        {
-            "Numer pala",
-            "Średnica pala [m]",
-            "Długość pala wg projektu [m]",
-            "Długość wykonanego pala [m]",
-            "Ilość betonu wbudowanego [m3]",
-            "Beton z betoniarni:",
-            "Zbrojenie:"
-        };
-
         for (var band = 0; band < BandCount; band++)
         {
             var top = baseRow + OffTable + band * BandHeight;
             var bottom = top + BandHeight - 1;
 
             var label = ws.Range(top, 1, bottom, 1).Merge();
-            label.FirstCell().Value = labels[band];
+            label.FirstCell().Value = BandLabels[band];
             StyleCell(label, fontSize: 12);
 
             for (var i = 0; i < LastDataColumn - FirstDataColumn + 1; i++)
@@ -222,6 +224,6 @@ public sealed class MetrykaWriter : IMetrykaWriter
         range.Style.Alignment.WrapText = true;
     }
 
-    private static string StripTrailingDot(string text)
+    internal static string StripTrailingDot(string text)
         => text.EndsWith('.') ? text[..^1] : text;
 }
