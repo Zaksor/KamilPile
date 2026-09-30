@@ -141,10 +141,14 @@ They come pre-filled; correct them once and they are remembered.
 
 **Stopka (tekst)** is printed bottom left of every page (the company name by
 default). **Obraz w stopce** adds a picture — a logo, a stamp — from a JPG, PNG,
-BMP, GIF or TIFF file, printed about 1 cm tall, **po lewej**, **na środku** or
-**po prawej**. The picture takes that part of the footer: on the left it moves
-the text to the middle, on the right it moves the page number there. It is kept
-inside the site's file, so it travels with the site; **Usuń** takes it off.
+BMP, GIF or TIFF file. It prints at the size it was designed for — its pixels
+over its dpi — made smaller only to fit between the side margins (about 17 cm)
+and within 3 cm of height; a company footer made for A4 at 300 dpi therefore
+runs across the page. A small logo goes **po lewej**, **na środku** or **po
+prawej** and takes that part of the footer (on the left it moves the text to the
+middle, on the right the page number). A picture wider than half the page takes
+the middle, with the text and page number on a line above it. It is kept inside
+the site's file, so it travels with the site; **Usuń** takes it off.
 
 ### Step 3 — log each day's work
 

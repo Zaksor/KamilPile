@@ -100,6 +100,19 @@ public sealed class MetrykaPdfWriter : IMetrykaWriter
             return;
         }
 
+        if (FooterImage.IsWide(png))
+        {
+            // As in the workbook: the picture centred on the footer line, the
+            // text and page number on a line just above it.
+            var (w, h) = FooterImage.PrintedSize(png);
+            using (var stream = new MemoryStream(png))
+            using (var image = XImage.FromStream(stream))
+                gfx.DrawImage(image, MarginLeft + (width - w) / 2, bottom - h, w, h);
+            gfx.DrawString(ExcelFooterPicture.WideCaption(s.Firma, pageNumber), font, XBrushes.Black,
+                new XRect(MarginLeft, bottom - h - line, width, line), XStringFormats.BottomCenter);
+            return;
+        }
+
         var (left, center, right) = ExcelFooterPicture.Sections(s, Picture, s.Firma, pageNumber);
         FooterItem(gfx, left, XStringFormats.BottomLeft, font, textRect, png);
         FooterItem(gfx, center, XStringFormats.BottomCenter, font, textRect, png);
