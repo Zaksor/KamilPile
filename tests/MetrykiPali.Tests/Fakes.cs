@@ -19,7 +19,6 @@ internal sealed class FakeMainView : IMainView
     public string FooterText { get; set; } = "GREIFBAU SP. Z O.O.";
     public FooterPosition FooterImagePosition { get; set; } = FooterPosition.Center;
     public string FooterImageLabel { get; set; } = "";
-    public bool JournalNewestFirst { get; set; }
     public string MissingMetrykiText { get; set; } = "";
     public ConcreteMode ConcreteMode { get; set; } = ConcreteMode.Factor;
     public double? JournalConcreteUsed { get; set; }
@@ -128,7 +127,6 @@ internal sealed class FakeMainView : IMainView
     public event EventHandler<DayConcreteEdited>? DayConcreteEdited;
     public event EventHandler? ConcreteModeChanged;
     public event EventHandler? MissingMetrykiRequested;
-    public event EventHandler? JournalOrderChanged;
     public event EventHandler? FooterImageRequested;
     public event EventHandler? FooterImageCleared;
     public event EventHandler<string>? SiteSelected;
@@ -191,11 +189,6 @@ internal sealed class FakeMainView : IMainView
         LogDay(date, piles);
     }
     public void ClickMissingMetryki() => MissingMetrykiRequested?.Invoke(this, EventArgs.Empty);
-    public void ChangeJournalOrder(bool newestFirst)
-    {
-        JournalNewestFirst = newestFirst;
-        JournalOrderChanged?.Invoke(this, EventArgs.Empty);
-    }
     public void ChooseFooterImage(string? path)
     {
         ImagePath = path;

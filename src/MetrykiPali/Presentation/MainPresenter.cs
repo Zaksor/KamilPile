@@ -54,7 +54,6 @@ public sealed class MainPresenter
         _view.DayConcreteEdited += (_, edit) => DayConcreteEdited(edit);
         _view.ConcreteModeChanged += (_, _) => ConcreteModeChanged();
         _view.MissingMetrykiRequested += (_, _) => ShowMissingMetryki();
-        _view.JournalOrderChanged += (_, _) => { RefreshJournal(); SaveQuietly(); };
         _view.FooterImageRequested += (_, _) => ChooseFooterImage();
         _view.FooterImageCleared += (_, _) => ClearFooterImage();
         _view.SiteSelected += (_, name) => SwitchSite(name);
@@ -145,7 +144,6 @@ public sealed class MainPresenter
             _view.FooterText = s.Firma;
             _view.FooterImagePosition = s.FooterImagePosition;
             _view.FooterImageLabel = FooterImageLabel(s);
-            _view.JournalNewestFirst = s.JournalNewestFirst;
             _view.ConcreteMode = s.ConcreteMode;
             _view.JournalConcreteUsed = null;
             _view.JournalDate = s.Data == default ? DateTime.Today : s.Data;
@@ -318,7 +316,7 @@ public sealed class MainPresenter
 
     private void RefreshJournal()
     {
-        _view.ShowJournal(_journal.Entries(_view.PilesPerPage, _view.JournalNewestFirst));
+        _view.ShowJournal(_journal.Entries(_view.PilesPerPage));
         _view.RefreshPiles();
         _view.CanGenerate = _journal.Assigned > 0;
 
@@ -674,7 +672,6 @@ public sealed class MainPresenter
                 FooterImage = current.FooterImage,
                 FooterImageName = current.FooterImageName,
                 FooterImagePosition = current.FooterImagePosition,
-                JournalNewestFirst = current.JournalNewestFirst,
                 ConcreteMode = current.ConcreteMode,
                 ConcreteFactor = current.ConcreteFactor,
                 PilesPerPage = current.PilesPerPage,
@@ -804,7 +801,6 @@ public sealed class MainPresenter
         s.Format = _view.OutputFormat;
         s.Firma = _view.FooterText.Trim();
         s.FooterImagePosition = _view.FooterImagePosition;
-        s.JournalNewestFirst = _view.JournalNewestFirst;
         s.ConcreteMode = _view.ConcreteMode;
         s.Data = _view.JournalDate.Date;
     }

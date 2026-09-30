@@ -33,7 +33,6 @@ public interface IMainView
     string FooterText { get; set; }
     FooterPosition FooterImagePosition { get; set; }
     string FooterImageLabel { get; set; }
-    bool JournalNewestFirst { get; set; }
     ConcreteMode ConcreteMode { get; set; }
 
     /// <summary>Concrete used on the day being entered, m3; null when left empty.</summary>
@@ -92,7 +91,6 @@ public interface IMainView
     event EventHandler<DayConcreteEdited> DayConcreteEdited;
     event EventHandler ConcreteModeChanged;
     event EventHandler MissingMetrykiRequested;
-    event EventHandler JournalOrderChanged;
     event EventHandler FooterImageRequested;
     event EventHandler FooterImageCleared;
     event EventHandler<string> SiteSelected;
