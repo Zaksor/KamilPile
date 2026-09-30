@@ -8,6 +8,13 @@ public sealed record PileEdited(int RowIndex, string PropertyName);
 /// <summary>The user typed a new concrete coefficient for a logged day.</summary>
 public sealed record DayFactorEdited(DateTime Date, double Factor);
 
+/// <summary>The window's colours; kept per computer, not per site.</summary>
+public enum AppTheme
+{
+    Light,
+    Dark
+}
+
 /// <summary>The user typed (or cleared) the concrete used on a logged day, m3.</summary>
 public sealed record DayConcreteEdited(DateTime Date, double? Total);
 
@@ -34,6 +41,7 @@ public interface IMainView
     FooterPosition FooterImagePosition { get; set; }
     string FooterImageLabel { get; set; }
     ConcreteMode ConcreteMode { get; set; }
+    AppTheme Theme { get; set; }
 
     /// <summary>Concrete used on the day being entered, m3; null when left empty.</summary>
     double? JournalConcreteUsed { get; set; }
@@ -55,6 +63,7 @@ public interface IMainView
     void ShowPiles(IReadOnlyList<Pile> piles);
     void ShowJournal(IReadOnlyList<JournalEntry> entries);
     void ShowSites(IReadOnlyList<string> sites, string current);
+    void ShowProgress(SiteProgress progress);
     void RefreshPiles();
 
     // --- talking to the user -------------------------------------------
@@ -90,6 +99,7 @@ public interface IMainView
     event EventHandler<DayFactorEdited> DayFactorEdited;
     event EventHandler<DayConcreteEdited> DayConcreteEdited;
     event EventHandler ConcreteModeChanged;
+    event EventHandler ThemeChanged;
     event EventHandler MissingMetrykiRequested;
     event EventHandler FooterImageRequested;
     event EventHandler FooterImageCleared;

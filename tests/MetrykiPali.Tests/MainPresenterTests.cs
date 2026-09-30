@@ -317,7 +317,7 @@ public class MainPresenterTests
         _view.ClickRemoveDay();
 
         Assert.Empty(_view.Journal);
-        Assert.Contains("Bez daty: 36", _view.StatusText);
+        Assert.Equal(36, _view.Progress!.Undated);
     }
 
     [Fact]
@@ -1011,17 +1011,56 @@ public class MainPresenterTests
     // --------------------------------------------------------------- status
 
     [Fact]
-    public void The_status_line_counts_piles_days_and_pages()
+    public void The_progress_counts_piles_days_and_pages()
     {
         LoadSchedule();
         _view.LogDay(D12, "1-12");
         _view.LogDay(D13, "13-30");
 
-        Assert.Contains("Pale: 36", _view.StatusText);
-        Assert.Contains("W dzienniku: 30", _view.StatusText);
-        Assert.Contains("Bez daty: 6", _view.StatusText);
-        Assert.Contains("Dni: 2", _view.StatusText);
-        Assert.Contains("Strony: 3", _view.StatusText);
+        var p = _view.Progress!;
+        Assert.Equal(3, p.Ranges);
+        Assert.Equal(36, p.Piles);
+        Assert.Equal(30, p.Logged);
+        Assert.Equal(6, p.Undated);
+        Assert.Equal(2, p.Days);
+        Assert.Equal(3, p.Pages);
+        Assert.Equal(36, p.WithoutMetryka);
+    }
+
+    [Fact]
+    public void The_concrete_progress_is_the_schedules_pure_geometry()
+    {
+        LoadSchedule();                                   // 12 × 7 m, 12 × 8 m, 12 × 9 m, all Ø 0.4
+        _view.LogDay(D12, "1-12");
+        _view.ChangeConcreteFactor(1.50);                  // a coefficient must not move the bar
+
+        var p = _view.Progress!;
+        var area = Math.PI * 0.4 * 0.4 / 4;
+        Assert.Equal(Math.Round(area * 12 * (7 + 8 + 9), 2), p.VolumeAll);
+        Assert.Equal(Math.Round(area * 12 * 7, 2), p.VolumeLogged);
+        Assert.Equal(Math.Round(12 * PileMath.Concrete(0.4, 7, 1.30), 2), p.ConcreteLogged);
+    }
+
+    [Fact]
+    public void The_status_line_is_left_for_messages()
+    {
+        LoadSchedule();
+        _view.LogDay(D12, "1-12");
+
+        Assert.StartsWith("Dodano 12 pali do dnia 12.09.2022", _view.StatusText);
+        Assert.DoesNotContain("Pale:", _view.StatusText);
+    }
+
+    [Fact]
+    public void The_chosen_colours_are_remembered_on_this_computer()
+    {
+        _view.ChangeTheme(AppTheme.Dark);
+
+        var next = new FakeMainView();
+        new MainPresenter(next, _reader, _writer, _repository).Start();
+
+        Assert.Equal("Ciemny", _repository.Theme);
+        Assert.Equal(AppTheme.Dark, next.Theme);
     }
 
     [Fact]

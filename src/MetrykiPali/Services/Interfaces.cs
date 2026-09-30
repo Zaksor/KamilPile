@@ -38,6 +38,9 @@ public interface IProjectRepository
     /// <summary>The site that was open when the app was last closed.</summary>
     string? LastSite { get; set; }
 
+    /// <summary>The window's colours last chosen on this computer ("Jasny" / "Ciemny").</summary>
+    string? Theme { get; set; }
+
     /// <summary>The folder holding everything; opened for the user on request.</summary>
     string DataDirectory { get; }
 

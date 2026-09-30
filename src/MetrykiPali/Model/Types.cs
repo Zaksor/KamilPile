@@ -128,6 +128,26 @@ public sealed class MetrykaSettings
     public MetrykaFormat Format { get; set; } = MetrykaFormat.Xlsx;
 }
 
+/// <summary>
+/// Where a site stands: the counts under the journal and the two progress bars
+/// on the schedule card.
+/// </summary>
+/// <param name="Ranges">Rows of the loaded schedule.</param>
+/// <param name="Piles">Piles in the schedule.</param>
+/// <param name="Logged">Piles with a pour date.</param>
+/// <param name="Days">Days in the journal.</param>
+/// <param name="Pages">Metryka pages the journal would print.</param>
+/// <param name="VolumeAll">Theoretical (geometric) volume of every pile in the schedule, m3 - no coefficient.</param>
+/// <param name="VolumeLogged">The same for the piles with a pour date.</param>
+/// <param name="ConcreteLogged">The concrete recorded for the piles with a pour date, m3.</param>
+/// <param name="WithoutMetryka">Piles still without a current metryka.</param>
+public sealed record SiteProgress(
+    int Ranges, int Piles, int Logged, int Days, int Pages,
+    double VolumeAll, double VolumeLogged, double ConcreteLogged, int WithoutMetryka)
+{
+    public int Undated => Piles - Logged;
+}
+
 /// <summary>How the concrete of a day's piles is worked out.</summary>
 [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<ConcreteMode>))]
 public enum ConcreteMode

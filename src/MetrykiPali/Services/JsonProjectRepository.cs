@@ -97,16 +97,26 @@ public sealed class JsonProjectRepository : IProjectRepository
 
     public string? LastSite
     {
-        get
-        {
-            try { return File.Exists(LastSiteFile) ? File.ReadAllText(LastSiteFile).Trim() : null; }
-            catch (IOException) { return null; }
-        }
-        set
-        {
-            Directory.CreateDirectory(DataDirectory);
-            File.WriteAllText(LastSiteFile, value ?? "");
-        }
+        get => ReadSetting(LastSiteFile);
+        set => WriteSetting(LastSiteFile, value);
+    }
+
+    public string? Theme
+    {
+        get => ReadSetting(Path.Combine(DataDirectory, "wyglad.txt"));
+        set => WriteSetting(Path.Combine(DataDirectory, "wyglad.txt"), value);
+    }
+
+    private static string? ReadSetting(string file)
+    {
+        try { return File.Exists(file) ? File.ReadAllText(file).Trim() : null; }
+        catch (IOException) { return null; }
+    }
+
+    private void WriteSetting(string file, string? value)
+    {
+        Directory.CreateDirectory(DataDirectory);
+        File.WriteAllText(file, value ?? "");
     }
 
     public void Save(string path, ProjectState state)

@@ -115,6 +115,21 @@ same pile number twice.
 The app expands the ranges into individual piles — `1–10` becomes ten piles — and
 works out the concrete for each.
 
+### The window
+
+Top bar: the **Budowa** picker (its list ends with **➕ Nowa budowa…**), **Nowa
+budowa**, **Więcej** (rename, add from a file, save a copy, data folder) and the
+**Jasny | Ciemny** switch — a light and a dark look, remembered on the computer.
+
+Three cards: **DANE BUDOWY** (the header printed on the metryki and the footer
+with its logo), **BETON** (how concrete is worked out — the field the chosen
+method uses is the one that can be typed in — and the plant), and **TABELKA Z
+PALAMI** (the loaded schedule, and two progress bars: piles in the journal, and
+concrete — the schedule's pure geometric volume, diameter and design length with
+no coefficient, logged against total). Below them the journal with the entry
+row, and a bottom bar with the counts, the piles still without a metryka, and
+the generate buttons.
+
 ### Step 2 — check the header
 
 **Budowa**, **Wykonawca**, **Metoda**, **Betoniarnia** are printed on every page.
@@ -407,6 +422,7 @@ src/MetrykiPali/
     MainPresenter.cs          all of the behaviour
   Views/
     MainForm.cs               the window — controls and events only
+    Ui.cs, Theme.cs           the window's own controls and its light and dark colours
 tests/MetrykiPali.Tests/
   fixtures/                   sample schedules in every supported format
 publish.ps1                   builds the standalone offline .exe
@@ -420,7 +436,7 @@ publish.ps1                   builds the standalone offline .exe
 dotnet test
 ```
 
-**277 tests** on xUnit v3, a few seconds, no window and no network.
+**278 tests** on xUnit v3, a few seconds, no window and no network.
 
 | Suite | What it covers |
 |---|---|

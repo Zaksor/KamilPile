@@ -22,6 +22,9 @@ internal sealed class FakeMainView : IMainView
     public string MissingMetrykiText { get; set; } = "";
     public ConcreteMode ConcreteMode { get; set; } = ConcreteMode.Factor;
     public double? JournalConcreteUsed { get; set; }
+    public AppTheme Theme { get; set; } = AppTheme.Light;
+    public SiteProgress? Progress { get; private set; }
+    public void ShowProgress(SiteProgress progress) => Progress = progress;
 
     /// <summary>The file the image dialog returns; null means the user cancelled.</summary>
     public string? ImagePath { get; set; }
@@ -126,6 +129,12 @@ internal sealed class FakeMainView : IMainView
     public event EventHandler<DayFactorEdited>? DayFactorEdited;
     public event EventHandler<DayConcreteEdited>? DayConcreteEdited;
     public event EventHandler? ConcreteModeChanged;
+    public event EventHandler? ThemeChanged;
+    public void ChangeTheme(AppTheme theme)
+    {
+        Theme = theme;
+        ThemeChanged?.Invoke(this, EventArgs.Empty);
+    }
     public event EventHandler? MissingMetrykiRequested;
     public event EventHandler? FooterImageRequested;
     public event EventHandler? FooterImageCleared;
@@ -254,6 +263,7 @@ internal sealed class InMemoryProjectRepository : IProjectRepository
     }
 
     public string? LastSite { get; set; }
+    public string? Theme { get; set; }
     public int Backups { get; private set; }
 
     /// <summary>Set to make the next save fail, as a full or read-only disk would.</summary>
