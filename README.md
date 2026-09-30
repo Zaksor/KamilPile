@@ -296,6 +296,20 @@ day, double-click its **Wsp. betonu (edytuj)** cell on the **Dziennik (dni)** ta
 — that day's volumes recalculate, the others stay as they were. The **Pale** tab
 shows which coefficient each pile was computed with.
 
+**Or from the concrete actually used.** Set **Beton liczony** to **z ilości
+zużytej w dniu** and a day's concrete comes from the figure on the delivery
+notes instead: type it in the box under the pile numbers when logging the day
+(or later, in the day's **Zużyto [m³]** cell in the journal). It is shared among
+that day's piles in proportion to their theoretical volume (diameter² ×
+length), to two decimals, and the shares add up to the figure exactly — the
+cents that plain rounding would lose go to the piles that were rounded down
+the most. The **Wsp. betonu** column then shows what the figure amounts to
+(used ÷ theoretical), a quick check it is sensible; below 1.0 or above 2.5 the
+app asks before taking it. Piles added to, moved off or corrected on such a
+day share the same total again. Clearing the cell, or typing a coefficient,
+takes the day back to the coefficient. Days on either method can sit side by
+side in one site.
+
 Projects saved by earlier versions open with every logged day pinned to the
 single coefficient they were saved with, so no volume changes on opening.
 
@@ -409,7 +423,7 @@ publish.ps1                   builds the standalone offline .exe
 dotnet test
 ```
 
-**254 tests** on xUnit v3, a few seconds, no window and no network.
+**277 tests** on xUnit v3, a few seconds, no window and no network.
 
 | Suite | What it covers |
 |---|---|
@@ -420,6 +434,7 @@ dotnet test
 | `PileTableReaderTests` | csv/xlsx/pdf, comma *and* dot decimals, junk skipped, a file locked by Excel, unsupported types |
 | `DesignerTableTests` | designers' summary tables in three real layouts (.xls and .xlsx): `-` / `÷`, single piles, cm, cage columns, totals; steel soldier columns refused; gaps and duplicate numbers |
 | `JournalToolsTests` | which piles lack a metryka (undated, never generated, changed since), journal order, footer text and picture in the workbook (VML shape in the chosen section) and in the PDF |
+| `MeasuredConcreteTests` | a day's concrete from what was used: shares by volume that add up to the cent, re-sharing when piles are added, moved or corrected, back to the coefficient, the sanity question, mixing both methods, restart and reload |
 | `PaginationTests` | days never share a page, an 18-pile day splits 12 + 6, date ordering |
 | `MetrykaWriterTests` | the produced workbook read back: label rows, 48-row blocks, per-page dates, page breaks, A4 fit-to-width, borders, an 80-page run |
 | `MetrykaPdfWriterTests` | the PDF read back: pages per day, dates, title and table text, Polish characters, page numbers, A4; `.pdf` vs `.xlsx` routing |
