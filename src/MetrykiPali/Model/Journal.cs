@@ -246,22 +246,26 @@ public sealed class Journal
         .Select(g => new WorkDay { Date = g.Key, Piles = g.OrderBy(p => p.Number).ToList() })
         .ToList();
 
-    /// <summary>The same days rendered for the journal grid.</summary>
-    public List<JournalEntry> Entries(int pilesPerPage)
+    /// <summary>The same days rendered for the journal grid, oldest or newest first.</summary>
+    public List<JournalEntry> Entries(int pilesPerPage, bool newestFirst = false)
     {
         var perPage = Math.Max(1, pilesPerPage);
 
-        return Days().Select(day => new JournalEntry
+        var entries = Days().Select(day => new JournalEntry
         {
             Data = day.Date,
             Pale = PileNumbers.Format(day.Piles.Select(p => p.Number)),
             Ilosc = day.Piles.Count,
             Beton = Math.Round(day.Piles.Sum(p => p.Concrete), 2),
             Wsp = EffectiveFactor(day.Piles),
-            Zuzyto = day.Piles[0].DayConcreteUsed,
+            Zuzyto = day.Piles[0].DayConcreteUsed ?? Math.Round(day.Piles.Sum(p => p.Concrete), 2),
+            Mierzone = day.Piles[0].DayConcreteUsed is not null,
             Strony = (int)Math.Ceiling(day.Piles.Count / (double)perPage),
             Metryki = GeneratedState(day.Piles)
         }).ToList();
+
+        if (newestFirst) entries.Reverse();
+        return entries;
     }
 
     /// <summary>

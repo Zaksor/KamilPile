@@ -176,7 +176,7 @@ public class MeasuredConcreteTests
 
         _view.LogDay(D12, "1-12");
         Assert.Contains("wpisz ilość zużytego betonu", _view.StatusText);
-        Assert.Null(_view.Journal[0].Zuzyto);
+        Assert.False(_view.Journal[0].Mierzone);
 
         _view.EditDayConcrete(D12, 13.20);
         Assert.Equal(13.20, _view.Journal[0].Beton);
@@ -187,7 +187,7 @@ public class MeasuredConcreteTests
     {
         _view.LogDay(D12, "1-12", concreteUsed: 50);
 
-        Assert.Null(_view.Journal[0].Zuzyto);
+        Assert.False(_view.Journal[0].Mierzone);
         Assert.Equal(PileMath.Concrete(0.4, 7, 1.30), _view.Piles[0].Concrete);
     }
 
@@ -199,7 +199,7 @@ public class MeasuredConcreteTests
 
         _view.EditDayConcrete(D12, null);
 
-        Assert.Null(_view.Journal[0].Zuzyto);
+        Assert.False(_view.Journal[0].Mierzone);
         Assert.Equal(PileMath.Concrete(0.4, 7, 1.30), _view.Piles[0].Concrete);
     }
 
@@ -212,7 +212,7 @@ public class MeasuredConcreteTests
         _view.EditDayConcrete(D12, 5.00);
 
         Assert.Contains(_view.Questions, q => q.StartsWith("Sprawdź ilość betonu") && q.Contains("mniej niż sama objętość"));
-        Assert.Null(_view.Journal[0].Zuzyto);
+        Assert.False(_view.Journal[0].Mierzone);
     }
 
     [Fact]
@@ -234,7 +234,7 @@ public class MeasuredConcreteTests
         _view.EditDayConcrete(D12, 1_000_000);
 
         Assert.Contains(_view.Errors, e => e.StartsWith("Błędna ilość betonu"));
-        Assert.Null(_view.Journal[0].Zuzyto);
+        Assert.False(_view.Journal[0].Mierzone);
     }
 
     [Fact]
@@ -248,7 +248,7 @@ public class MeasuredConcreteTests
         new MainPresenter(next, _reader, new RecordingMetrykaWriter(), _repository).Start();
 
         Assert.Equal(ConcreteMode.Measured, next.ConcreteMode);
-        Assert.Null(next.Journal[0].Zuzyto);
+        Assert.False(next.Journal[0].Mierzone);
         Assert.Equal(1.30, next.Journal[0].Wsp);
         Assert.Equal(45.00, next.Journal[1].Zuzyto);
         Assert.Equal(45.00, Math.Round(next.Piles.Skip(12).Sum(p => p.Concrete), 2));

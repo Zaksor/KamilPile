@@ -54,6 +54,7 @@ public sealed class MainPresenter
         _view.DayConcreteEdited += (_, edit) => DayConcreteEdited(edit);
         _view.ConcreteModeChanged += (_, _) => ConcreteModeChanged();
         _view.ThemeChanged += (_, _) => RememberTheme();
+        _view.JournalOrderChanged += (_, _) => { RefreshJournal(); SaveQuietly(); };
         _view.MissingMetrykiRequested += (_, _) => ShowMissingMetryki();
         _view.FooterImageRequested += (_, _) => ChooseFooterImage();
         _view.FooterImageCleared += (_, _) => ClearFooterImage();
@@ -156,6 +157,7 @@ public sealed class MainPresenter
             _view.FooterImagePosition = s.FooterImagePosition;
             _view.FooterImageLabel = FooterImageLabel(s);
             _view.ConcreteMode = s.ConcreteMode;
+            _view.JournalNewestFirst = s.JournalNewestFirst;
             _view.JournalConcreteUsed = null;
             _view.JournalDate = s.Data == default ? DateTime.Today : s.Data;
 
@@ -326,7 +328,7 @@ public sealed class MainPresenter
 
     private void RefreshJournal()
     {
-        _view.ShowJournal(_journal.Entries(_view.PilesPerPage));
+        _view.ShowJournal(_journal.Entries(_view.PilesPerPage, _view.JournalNewestFirst));
         _view.RefreshPiles();
         _view.CanGenerate = _journal.Assigned > 0;
 
@@ -683,6 +685,7 @@ public sealed class MainPresenter
                 FooterImageName = current.FooterImageName,
                 FooterImagePosition = current.FooterImagePosition,
                 ConcreteMode = current.ConcreteMode,
+                JournalNewestFirst = current.JournalNewestFirst,
                 ConcreteFactor = current.ConcreteFactor,
                 PilesPerPage = current.PilesPerPage,
                 Format = current.Format
@@ -812,6 +815,7 @@ public sealed class MainPresenter
         s.Firma = _view.FooterText.Trim();
         s.FooterImagePosition = _view.FooterImagePosition;
         s.ConcreteMode = _view.ConcreteMode;
+        s.JournalNewestFirst = _view.JournalNewestFirst;
         s.Data = _view.JournalDate.Date;
     }
 

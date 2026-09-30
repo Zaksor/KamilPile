@@ -77,8 +77,15 @@ public sealed class JournalEntry
     /// </summary>
     public double Wsp { get; set; }
 
-    /// <summary>The concrete used that day, m3, or null when the coefficient applies.</summary>
+    /// <summary>
+    /// The concrete used that day, m3: the figure typed in when the day is
+    /// worked out from it, otherwise what the coefficient gives (the day's
+    /// total). Nullable only so a cleared cell can say "back to the coefficient".
+    /// </summary>
     public double? Zuzyto { get; set; }
+
+    /// <summary>The day's concrete was typed in (from the delivery notes), not worked out.</summary>
+    public bool Mierzone { get; set; }
 
     public int Strony { get; set; }
 
@@ -111,6 +118,9 @@ public sealed class MetrykaSettings
 
     /// <summary>How a newly logged day's concrete is worked out.</summary>
     public ConcreteMode ConcreteMode { get; set; } = ConcreteMode.Factor;
+
+    /// <summary>The journal lists the newest day first (flipped by clicking the Data header).</summary>
+    public bool JournalNewestFirst { get; set; }
 
     /// <summary>Date proposed in the journal entry box; not written to the metryki.</summary>
     public DateTime Data { get; set; } = DateTime.Today;

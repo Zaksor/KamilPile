@@ -23,6 +23,7 @@ internal sealed class FakeMainView : IMainView
     public ConcreteMode ConcreteMode { get; set; } = ConcreteMode.Factor;
     public double? JournalConcreteUsed { get; set; }
     public AppTheme Theme { get; set; } = AppTheme.Light;
+    public bool JournalNewestFirst { get; set; }
     public SiteProgress? Progress { get; private set; }
     public void ShowProgress(SiteProgress progress) => Progress = progress;
 
@@ -130,6 +131,12 @@ internal sealed class FakeMainView : IMainView
     public event EventHandler<DayConcreteEdited>? DayConcreteEdited;
     public event EventHandler? ConcreteModeChanged;
     public event EventHandler? ThemeChanged;
+    public event EventHandler? JournalOrderChanged;
+    public void ChangeJournalOrder(bool newestFirst)
+    {
+        JournalNewestFirst = newestFirst;
+        JournalOrderChanged?.Invoke(this, EventArgs.Empty);
+    }
     public void ChangeTheme(AppTheme theme)
     {
         Theme = theme;

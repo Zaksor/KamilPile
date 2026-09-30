@@ -71,7 +71,7 @@ public sealed class MainForm : Form, IMainView
     private readonly TabStrip _tabs = new("Dziennik robót", "Pale", "Zakresy z tabelki") { Dock = DockStyle.Fill };
     private readonly FlatButton _btnRemoveDay = new("Usuń zaznaczony dzień", ButtonKind.Ghost) { Dock = DockStyle.Right };
     private readonly DateBox _day = new() { Dock = DockStyle.Fill };
-    private readonly InputBox _dayPiles = new("Pale, np. 1-10, 25, 30-33   ·   Enter dodaje") { Dock = DockStyle.Fill };
+    private readonly InputBox _dayPiles = new("Pale, np. 1-10, 25, 30-33   ·   Enter dodaje") { Dock = DockStyle.Fill, EnterAccepts = false };   // Enter adds the day
     private readonly FlatButton _btnAddDay = new("Dodaj do dziennika", ButtonKind.Primary) { Margin = new Padding(6, 3, 0, 3) };
     private readonly FlatButton _btnAddSelected = new("Dodaj zaznaczone z listy pali") { Margin = new Padding(8, 3, 0, 3) };
     private readonly Label _status = new() { Dock = DockStyle.Fill, AutoEllipsis = true, Tag = "muted", TextAlign = ContentAlignment.MiddleLeft };
@@ -195,6 +195,15 @@ public sealed class MainForm : Form, IMainView
         set { _concreteMode.SelectedIndex = value == ConcreteMode.Measured ? 1 : 0; ShowConcreteFields(); }
     }
 
+    private bool _newestFirst;
+
+    /// <summary>Flipped by clicking the "Data" header; the arrow in it shows which way.</summary>
+    bool IMainView.JournalNewestFirst
+    {
+        get => _newestFirst;
+        set => _newestFirst = value;
+    }
+
     AppTheme IMainView.Theme
     {
         get => _theme.SelectedIndex == 1 ? AppTheme.Dark : AppTheme.Light;
@@ -260,6 +269,7 @@ public sealed class MainForm : Form, IMainView
     public event EventHandler<DayConcreteEdited>? DayConcreteEdited;
     public event EventHandler? ConcreteModeChanged;
     public event EventHandler? ThemeChanged;
+    public event EventHandler? JournalOrderChanged;
     public event EventHandler? MissingMetrykiRequested;
     public event EventHandler? FooterImageRequested;
     public event EventHandler? FooterImageCleared;
@@ -362,6 +372,22 @@ public sealed class MainForm : Form, IMainView
             MessageBox.Show(this, "Wpisz liczbę, np. 1,25.", "Błędna liczba", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         };
         _gridJournal.CellPainting += PaintMetrykiBadge;
+
+        // Clicking "Data" lists the newest day first, or the oldest again.
+        _gridJournal.ColumnHeaderMouseClick += (_, e) =>
+        {
+            if (_gridJournal.Columns[e.ColumnIndex].DataPropertyName != nameof(JournalEntry.Data)) return;
+            _newestFirst = !_newestFirst;
+            JournalOrderChanged?.Invoke(this, EventArgs.Empty);
+        };
+        _gridJournal.CellFormatting += (_, e) =>
+        {
+            // A day's concrete that was typed in (from the delivery notes) stands out from a worked-out one.
+            if (e.RowIndex < 0 || e.CellStyle is null) return;
+            if (_gridJournal.Columns[e.ColumnIndex].DataPropertyName != nameof(JournalEntry.Zuzyto)) return;
+            if (_gridJournal.Rows[e.RowIndex].DataBoundItem is JournalEntry { Mierzone: true })
+                e.CellStyle.Font = new Font(_gridJournal.Font, FontStyle.Bold);
+        };
         foreach (var grid in new[] { _gridJournal, _gridPiles, _gridRanges })
         {
             grid.CellPainting += PaintCell;
@@ -440,7 +466,7 @@ public sealed class MainForm : Form, IMainView
 
         SetHeaders(_gridJournal, new()
         {
-            [nameof(JournalEntry.Data)] = "Data",
+            [nameof(JournalEntry.Data)] = _newestFirst ? "Data ▼" : "Data ▲",
             [nameof(JournalEntry.Pale)] = "Pale",
             [nameof(JournalEntry.Ilosc)] = "Ilość",
             [nameof(JournalEntry.Beton)] = "Beton [m³]",
@@ -459,7 +485,8 @@ public sealed class MainForm : Form, IMainView
         Column(_gridJournal, nameof(JournalEntry.Data), c => { c.DefaultCellStyle.Format = "dd.MM.yyyy"; c.FillWeight = 70; });
         Column(_gridJournal, nameof(JournalEntry.Pale), c => c.FillWeight = 190);
         Column(_gridJournal, nameof(JournalEntry.Ilosc), c => { c.FillWeight = 45; AlignRight(c); });
-        Column(_gridJournal, nameof(JournalEntry.Beton), c => { c.DefaultCellStyle.Format = "0.00"; c.FillWeight = 70; AlignRight(c); });
+        Column(_gridJournal, nameof(JournalEntry.Beton), c => c.Visible = false);   // always equal to "Zużyto" now
+        Column(_gridJournal, nameof(JournalEntry.Mierzone), c => c.Visible = false); // shown as bold "Zużyto" instead
         Column(_gridJournal, nameof(JournalEntry.Wsp), c =>
         {
             c.DefaultCellStyle.Format = "0.00"; c.FillWeight = 55; AlignRight(c);
@@ -469,8 +496,8 @@ public sealed class MainForm : Form, IMainView
         {
             c.DefaultCellStyle.Format = "0.00"; c.DefaultCellStyle.NullValue = "—"; c.DefaultCellStyle.DataSourceNullValue = null;
             c.FillWeight = 80; AlignRight(c);
-            c.ToolTipText = "Ile betonu zużyto tego dnia (np. z WZ). Program rozdzieli go na pale według ich objętości. " +
-                            "Wyczyść komórkę, aby wrócić do liczenia ze współczynnika.";
+            c.ToolTipText = "Beton zużyty tego dnia. Przy współczynniku — wyliczony; wpisz własną ilość (np. z WZ), a program rozdzieli ją na pale " +
+                            "według ich objętości (wtedy jest pogrubiona). Wyczyść komórkę, aby wrócić do liczenia ze współczynnika.";
         });
         Column(_gridJournal, nameof(JournalEntry.Strony), c => { c.FillWeight = 45; AlignRight(c); });
         Column(_gridJournal, nameof(JournalEntry.Metryki), c => c.FillWeight = 90);
@@ -501,10 +528,10 @@ public sealed class MainForm : Form, IMainView
             : $"{(string.IsNullOrEmpty(folder) ? "" : folder + "  ·  ")}{p.Ranges} {Ranges(p.Ranges)}  ·  {p.Piles} pali";
 
         _pileProgress.Set("Pale w dzienniku", $"{p.Logged} z {p.Piles}", p.Piles == 0 ? 0 : p.Logged / (double)p.Piles);
-        _concreteProgress.Set("Beton — objętość teoretyczna",
-            $"{p.VolumeLogged.ToString("N1", Polish)} z {p.VolumeAll.ToString("N1", Polish)} m³",
-            p.VolumeAll <= 0 ? 0 : p.VolumeLogged / p.VolumeAll);
-        _concreteBuilt.Text = p.Logged == 0 ? "" : $"Wbudowano dotąd: {p.ConcreteLogged.ToString("N2", Polish)} m³ betonu";
+        _concreteProgress.Set("Beton zużyty wobec objętości teoretycznej",
+            $"{p.ConcreteLogged.ToString("N1", Polish)} z {p.VolumeAll.ToString("N1", Polish)} m³",
+            p.VolumeAll <= 0 ? 0 : p.ConcreteLogged / p.VolumeAll);
+        _concreteBuilt.Text = p.Logged == 0 ? "" : $"Objętość teoretyczna wpisanych pali: {p.VolumeLogged.ToString("N1", Polish)} m³";
     }
 
     private static string Ranges(int n)
@@ -604,7 +631,7 @@ public sealed class MainForm : Form, IMainView
     {
         using var form = Dialog(title, new Size(480, 170));
         var label = new Label { Text = prompt, Left = 18, Top = 16, Width = 444, Height = 36, ForeColor = _palette.Text, BackColor = _palette.Card };
-        var box = new InputBox { Left = 18, Top = 58, Width = 444 };
+        var box = new InputBox { Left = 18, Top = 58, Width = 444, Expands = false, EnterAccepts = false };
         box.Box.Text = initial;
         box.ApplyTheme(_palette);
         var ok = new FlatButton("OK", ButtonKind.Primary) { DialogResult = DialogResult.OK, Left = 286, Top = 114, Width = 84 };
@@ -670,7 +697,7 @@ public sealed class MainForm : Form, IMainView
     {
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Margin = Padding.Empty, Padding = Padding.Empty };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 262));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 300));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
         root.Controls.Add(BuildTopBar(), 0, 0);
@@ -712,16 +739,23 @@ public sealed class MainForm : Form, IMainView
 
         // DANE BUDOWY
         var site = new Card("Dane budowy") { Dock = DockStyle.Fill, Margin = new Padding(0, 0, 14, 0) };
-        var siteFields = Fields(site.Body, 104, 5);
+        var siteFields = Fields(site.Body, 104, 6);
         AddField(siteFields, 0, "Budowa", _budowa);
         AddField(siteFields, 1, "Wykonawca", _wykonawca);
         AddField(siteFields, 2, "Metoda", _metoda);
         AddField(siteFields, 3, "Stopka", _footer);
+        _logoName.Width = 150;
         var logo = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty, Padding = new Padding(0, 1, 0, 0) };
-        logo.Controls.AddRange(new Control[] { _logoName, _btnLogo, _btnLogoClear, _logoPosition });
+        logo.Controls.AddRange(new Control[] { _logoName, _btnLogo, _btnLogoClear });
         _surfaces.Add(logo);
-        _tips.SetToolTip(_logoPosition, "Gdzie w stopce ma stać logo");
         AddField(siteFields, 4, "Logo w stopce", logo);
+
+        // The position on a row of its own, centred under the fields above -
+        // beside the logo buttons it ran past the edge of the card.
+        _logoPosition.Width = 210;
+        _tips.SetToolTip(_logoPosition, "Gdzie w stopce ma stać logo");
+        AddField(siteFields, 5, "Położenie logo", _logoPosition);
+        _logoPosition.Anchor = AnchorStyles.None;
 
         // BETON
         var concrete = new Card("Beton") { Dock = DockStyle.Fill, Margin = new Padding(0, 0, 14, 0) };

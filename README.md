@@ -125,10 +125,14 @@ Three cards: **DANE BUDOWY** (the header printed on the metryki and the footer
 with its logo), **BETON** (how concrete is worked out — the field the chosen
 method uses is the one that can be typed in — and the plant), and **TABELKA Z
 PALAMI** (the loaded schedule, and two progress bars: piles in the journal, and
-concrete — the schedule's pure geometric volume, diameter and design length with
-no coefficient, logged against total). Below them the journal with the entry
-row, and a bottom bar with the counts, the piles still without a metryka, and
-the generate buttons.
+concrete — the journal's "Zużyto" total against the schedule's pure geometric
+volume, diameter and design length with no coefficient). Below them the journal
+with the entry row, and a bottom bar with the counts, the piles still without a
+metryka, and the generate buttons.
+
+Text fields grow while you type when the text is longer than the field, and
+after Enter (or leaving the field) go back to their size, showing the text from
+its beginning; Enter also moves on to the next field.
 
 ### Step 2 — check the header
 
@@ -156,10 +160,16 @@ Write ranges and single numbers separated by commas, semicolons or spaces —
 
 The **Dziennik (dni)** tab then shows one line per day:
 
-| Data | Pale | Ilość | Beton [m³] | Wsp. betonu | Stron | Metryki wygenerowane |
+| Data ▲ | Pale | Ilość | Wsp. | Zużyto [m³] | Stron | Metryki |
 |---|---|---|---|---|---|---|
-| 12.09.2022 | 1-10, 17-18 | 12 | 14.02 | 1,30 | 1 | 12.09.2022 |
-| 13.09.2022 | 11-16, 63-66, 77-84 | 18 | 24.18 | 1,30 | 2 | nie |
+| 12.09.2022 | 1-10, 17-18 | 12 | 1,30 | 14,02 | 1 | ✓ 12.09.2022 |
+| 13.09.2022 | 11-16, 63-66, 77-84 | 18 | 1,34 | **24,60** | 2 | nie |
+
+A click on **Data** lists the newest day first (▼) or the oldest (▲); it is
+remembered with the site, and the metryki are always written in date order.
+
+**Zużyto** is the day's concrete: worked out from the coefficient, or — in
+bold — the figure typed in from the delivery notes (see section 5).
 
 **Metryki wygenerowane** shows when a day's metryki were written: a date,
 **nie**, or **częściowo** when piles were added to the day afterwards. A day
@@ -436,7 +446,7 @@ publish.ps1                   builds the standalone offline .exe
 dotnet test
 ```
 
-**278 tests** on xUnit v3, a few seconds, no window and no network.
+**281 tests** on xUnit v3, a few seconds, no window and no network.
 
 | Suite | What it covers |
 |---|---|

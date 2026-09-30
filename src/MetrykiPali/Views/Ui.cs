@@ -323,6 +323,20 @@ internal class InputBox : Panel, IThemed
 
     public TextBox Box { get; } = new() { BorderStyle = BorderStyle.None };
 
+    /// <summary>While typing, the field grows to fit a text longer than itself.</summary>
+    public bool Expands { get; set; } = true;
+
+    /// <summary>Enter accepts the text: back to its start, and on to the next field.</summary>
+    public bool EnterAccepts { get; set; } = true;
+
+    // Where the field lives while it is not lifted out to grow.
+    private Control? _home;
+    private TableLayoutPanelCellPosition _cell;
+    private DockStyle _homeDock;
+    private AnchorStyles _homeAnchor;
+    private int _homeWidth;
+    private bool _lifted, _moving;
+
     public InputBox(string placeholder = "")
     {
         DoubleBuffered = true;
@@ -332,9 +346,76 @@ internal class InputBox : Panel, IThemed
         Box.Dock = DockStyle.Fill;
         Box.PlaceholderText = placeholder;
         Controls.Add(Box);
-        Box.GotFocus += (_, _) => Invalidate();
-        Box.LostFocus += (_, _) => Invalidate();
+        Box.GotFocus += (_, _) => { Invalidate(); Grow(); };
+        Box.TextChanged += (_, _) => { if (Box.Focused) Grow(); };
+        Box.LostFocus += (_, _) => { Invalidate(); if (!_moving) Settle(); };
+        Box.KeyDown += (_, e) =>
+        {
+            if (e.KeyCode != Keys.Enter || !EnterAccepts) return;
+            e.SuppressKeyPress = true;
+            Settle();
+            // From the text box itself: starting from the frame would pick the box inside it again.
+            FindForm()?.SelectNextControl(Box, true, true, true, true);
+        };
         Click += (_, _) => Box.Focus();
+    }
+
+    private int Needed => TextRenderer.MeasureText(Box.Text + "   ", Box.Font).Width + Padding.Horizontal + 6;
+
+    /// <summary>
+    /// Makes room for the text being typed. A field in a card cannot be wider
+    /// than its cell, so it is lifted onto the window itself, at the same spot,
+    /// and widened over whatever is to its right - until it is left.
+    /// </summary>
+    private void Grow()
+    {
+        if (!Expands || FindForm() is not { } form) return;
+
+        if (!_lifted)
+        {
+            if (Needed <= Width || Parent is null) return;
+
+            var at = form.PointToClient(PointToScreen(Point.Empty));
+            _home = Parent;
+            _homeDock = Dock;
+            _homeAnchor = Anchor;
+            _homeWidth = Width;
+            if (Parent is TableLayoutPanel table) _cell = table.GetCellPosition(this);
+
+            var (start, length) = (Box.SelectionStart, Box.SelectionLength);
+            _moving = true;
+            form.Controls.Add(this);
+            Dock = DockStyle.None;
+            Anchor = AnchorStyles.Top | AnchorStyles.Left;
+            Location = at;
+            BringToFront();
+            _lifted = true;
+            Box.Focus();
+            Box.Select(start, length);
+            _moving = false;
+        }
+
+        var room = form.ClientSize.Width - Left - 16;
+        Width = Math.Max(_homeWidth, Math.Min(Needed, room));
+    }
+
+    /// <summary>Back in its place, showing the text from its beginning.</summary>
+    private void Settle()
+    {
+        if (_lifted && _home is not null)
+        {
+            _moving = true;
+            if (_home is TableLayoutPanel table) table.Controls.Add(this, _cell.Column, _cell.Row);
+            else _home.Controls.Add(this);
+            Dock = _homeDock;
+            Anchor = _homeAnchor;
+            Width = _homeWidth;
+            _lifted = false;
+            _moving = false;
+        }
+
+        Box.Select(0, 0);
+        Box.ScrollToCaret();
     }
 
     public virtual void ApplyTheme(Palette p)
@@ -383,6 +464,8 @@ internal sealed class NumberBox : InputBox
 
     public NumberBox(string placeholder = "") : base(placeholder)
     {
+        Expands = false;          // numbers are short; Enter here commits the value
+        EnterAccepts = false;
         Box.TextAlign = HorizontalAlignment.Left;
         Box.KeyDown += (_, e) =>
         {
@@ -437,6 +520,8 @@ internal sealed class DateBox : InputBox
 
     public DateBox() : base()
     {
+        Expands = false;
+        EnterAccepts = false;
         Controls.Add(_button);
         _button.BringToFront();
         Box.BringToFront();

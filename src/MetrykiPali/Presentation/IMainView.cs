@@ -42,6 +42,7 @@ public interface IMainView
     string FooterImageLabel { get; set; }
     ConcreteMode ConcreteMode { get; set; }
     AppTheme Theme { get; set; }
+    bool JournalNewestFirst { get; set; }
 
     /// <summary>Concrete used on the day being entered, m3; null when left empty.</summary>
     double? JournalConcreteUsed { get; set; }
@@ -100,6 +101,7 @@ public interface IMainView
     event EventHandler<DayConcreteEdited> DayConcreteEdited;
     event EventHandler ConcreteModeChanged;
     event EventHandler ThemeChanged;
+    event EventHandler JournalOrderChanged;
     event EventHandler MissingMetrykiRequested;
     event EventHandler FooterImageRequested;
     event EventHandler FooterImageCleared;
