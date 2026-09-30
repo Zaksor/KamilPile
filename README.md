@@ -350,7 +350,7 @@ publish.ps1                   builds the standalone offline .exe
 dotnet test
 ```
 
-**169 tests** on xUnit v3, a few seconds, no window and no network.
+**206 tests** on xUnit v3, a few seconds, no window and no network.
 
 | Suite | What it covers |
 |---|---|

@@ -709,6 +709,25 @@ public class MainPresenterTests
     }
 
     [Fact]
+    public void One_day_written_as_pdf_carries_that_days_own_coefficient()
+    {
+        LoadSchedule();
+        _view.LogDay(D12, "1-12");
+        _view.ChangeConcreteFactor(1.20);
+        _view.LogDay(D13, "13-24");
+        _view.EditDayFactor(D13, 1.45);
+        _view.ChangeOutputFormat(MetrykaFormat.Pdf);
+        _view.MetrykiPath = @"C:\wyjscie\dzien.pdf";
+
+        _view.ClickGenerateSelectedDays(D13);
+
+        var day = Assert.Single(_writer.Days);
+        Assert.Equal(D13, day.Date);
+        Assert.All(day.Piles, p => Assert.Equal(PileMath.Concrete(0.4, 8, 1.45), p.Concrete));
+        Assert.Equal("Metryki pali 2022-09-13.pdf", _view.SuggestedMetrykiName);
+    }
+
+    [Fact]
     public void The_picked_format_is_remembered_next_time()
     {
         LoadSchedule();
