@@ -34,7 +34,7 @@ public class RobustnessTests
     }
 
     [Fact]
-    public void An_old_xls_file_is_refused_with_an_instruction_not_a_crash()
+    public void A_damaged_xls_file_fails_in_a_way_the_app_can_report()
     {
         var path = Temp(".xls");
         File.WriteAllBytes(path, new byte[] { 0xD0, 0xCF, 0x11, 0xE0, 1, 2, 3, 4 });
@@ -42,8 +42,8 @@ public class RobustnessTests
         {
             var thrown = Record.Exception(() => Reader.Read(path));
 
-            Assert.IsType<NotSupportedException>(thrown);
-            Assert.Contains(".xlsx", thrown!.Message);
+            Assert.IsType<InvalidDataException>(thrown);
+            Assert.Contains(".xls", thrown!.Message);
         }
         finally { File.Delete(path); }
     }

@@ -80,8 +80,25 @@ work exactly as usual; `run.ps1` is only a set of shortcuts over them.
 
 ### Step 1 — load the schedule (once per site)
 
-Press **Wczytaj tabelkę...** and pick the file. Accepted: `.xlsx`, `.xls`,
-`.csv`, `.pdf`. The columns must be in this order:
+Press **Wczytaj tabelkę...** and pick the file. Accepted: `.xlsx`, `.xls`
+(Excel 97-2003), `.csv`, `.pdf`.
+
+**The designer's summary table, as it comes** (`TABELA ZESTAWCZA PALOWANIA`,
+`ZESTAWIENIE PALI`, …) is read by its headers, so the column order and the extra
+columns (rzędne, łączna długość, masa, …) do not matter. It needs:
+
+| header | read as |
+|---|---|
+| `NR PALI` / `NUMERY PALI` | `1 - 19`, `1 ÷ 28`, or a single number in either cell |
+| `ŚREDNICA` | with its unit from the row below — `[cm]`, `[mm]` or `[m]` |
+| `DŁUGOŚĆ 1 PALA` / `DŁUGOŚĆ PALI` | one pile — not `ŁĄCZNA DŁUGOŚĆ`, not the cage's `DŁUGOŚĆ [Lz]` |
+| `ZBROJENIE` / `RODZAJ ZBROJENIA` | optional; `-` or blank becomes `Brak`, `Z1` / `IPE160` are kept |
+
+Totals rows and lookup lists below the table are skipped. A table of steel
+soldier columns (`NUMERY SŁUPÓW`, IPE sections) has no diameter and is refused
+with that reason.
+
+**Or a plain five-column table**, in this order:
 
 | numer od | numer do | średnica [m] | długość pala [m] | zbrojenie |
 |---|---|---|---|---|
@@ -90,6 +107,10 @@ Press **Wczytaj tabelkę...** and pick the file. Accepted: `.xlsx`, `.xls`,
 
 Title lines, blank rows, notes and totals are skipped automatically. Both `0.4`
 and `0,4` are understood.
+
+After loading, the app says if the numbering has gaps (often deliberate — piles
+dropped from the design — but worth a look), and refuses a table that gives the
+same pile number twice.
 
 The app expands the ranges into individual piles — `1–10` becomes ten piles — and
 works out the concrete for each.
@@ -328,6 +349,8 @@ src/MetrykiPali/
   Services/
     Interfaces.cs             IScheduleReader, IMetrykaWriter, IProjectRepository
     PileTableReader.cs        reads .xlsx / .xls / .csv / .pdf
+    DesignerTable.cs          reads a designer's summary table by its headers
+    LegacyExcel.cs            opens old .xls workbooks
     MetrykaWriter.cs          writes the paginated METRYKA PALI workbook
     MetrykaPdfWriter.cs       writes the same pages straight to PDF
     MetrykaFileWriter.cs      picks the writer from the file extension
@@ -350,7 +373,7 @@ publish.ps1                   builds the standalone offline .exe
 dotnet test
 ```
 
-**206 tests** on xUnit v3, a few seconds, no window and no network.
+**217 tests** on xUnit v3, a few seconds, no window and no network.
 
 | Suite | What it covers |
 |---|---|
@@ -359,6 +382,7 @@ dotnet test
 | `PileNumbersTests` | `1-10, 25, 30-33`, mixed separators, en/em dashes, dedup, round-trip; junk rejected with the bad fragment named |
 | `PileMathTests` | the formula, every length in the reference table, half-away-from-zero rounding |
 | `PileTableReaderTests` | csv/xlsx/pdf, comma *and* dot decimals, junk skipped, a file locked by Excel, unsupported types |
+| `DesignerTableTests` | designers' summary tables in three real layouts (.xls and .xlsx): `-` / `÷`, single piles, cm, cage columns, totals; steel soldier columns refused; gaps and duplicate numbers |
 | `PaginationTests` | days never share a page, an 18-pile day splits 12 + 6, date ordering |
 | `MetrykaWriterTests` | the produced workbook read back: label rows, 48-row blocks, per-page dates, page breaks, A4 fit-to-width, borders, an 80-page run |
 | `MetrykaPdfWriterTests` | the PDF read back: pages per day, dates, title and table text, Polish characters, page numbers, A4; `.pdf` vs `.xlsx` routing |
@@ -377,6 +401,10 @@ and double as sample files to try the app with:
 | `tabelka-przecinki.csv` | semicolons with **comma** decimals |
 | `tabelka-angielska.csv` | commas as field separators |
 | `tabelka-smieci.csv` | title lines, blank row, a note and a totals row to ignore |
+| `zestawienie-myslniki.xls` | designer's table: `1 - 12`, single pile in the middle cell, Ø in cm, `-` for no cage, a gap at 21 |
+| `zestawienie-daszki.xls` | designer's table: `1 ÷ 10`, Z1 / Z2 / IPE220, cage columns and a SUMA row |
+| `zestawienie-kolejnosc.xlsx` | designer's table with the columns in another order, IPE160 on one pile |
+| `zestawienie-slupy.xls` | steel soldier columns — refused |
 
 Two real bugs were found by writing these: CSV files with comma decimals were
 silently dropping every row, and starting a new project overwrote the file the
