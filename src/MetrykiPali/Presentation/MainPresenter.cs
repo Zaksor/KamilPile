@@ -42,6 +42,7 @@ public sealed class MainPresenter
         _view.AddSelectedPilesRequested += (_, _) => AddSelectedPilesToJournal();
         _view.RemoveDayRequested += (_, _) => RemoveSelectedDay();
         _view.GenerateRequested += (_, _) => Generate();
+        _view.GenerateSelectedDaysRequested += (_, _) => GenerateSelectedDays();
         _view.OpenOutputRequested += (_, _) => OpenLastOutput();
         _view.SettingsChanged += (_, _) => SaveQuietly();
         _view.ConcreteFactorChanged += (_, _) => ConcreteFactorChanged();
@@ -281,7 +282,39 @@ public sealed class MainPresenter
                 "Wygenerować metryki tylko dla pali z dziennika?"))
             return;
 
-        var path = _view.AskWhereToSaveMetryki($"Metryki pali {DateTime.Today:yyyy-MM-dd}.xlsx");
+        WriteMetryki(days, $"Metryki pali {DateTime.Today:yyyy-MM-dd}.xlsx");
+    }
+
+    /// <summary>
+    /// Generates only the days picked in the journal - typically the one just
+    /// finished, so its metryki can be handed over without waiting for the end
+    /// of the job.
+    /// </summary>
+    private void GenerateSelectedDays()
+    {
+        CaptureSettings();
+
+        var selected = _view.SelectedJournalDays.Select(d => d.Date).ToHashSet();
+        var days = _journal.Days().Where(d => selected.Contains(d.Date)).ToList();
+        if (days.Count == 0)
+        {
+            _view.ShowInfo("Brak zaznaczenia",
+                "Zaznacz dzień (albo kilka dni) na liście \"Dziennik (dni)\", dla których chcesz wygenerować metryki.");
+            return;
+        }
+
+        var first = days[0].Date;
+        var last = days[^1].Date;
+        var name = first == last
+            ? $"Metryki pali {first:yyyy-MM-dd}.xlsx"
+            : $"Metryki pali {first:yyyy-MM-dd} do {last:yyyy-MM-dd}.xlsx";
+
+        WriteMetryki(days, name);
+    }
+
+    private void WriteMetryki(List<WorkDay> days, string suggestedName)
+    {
+        var path = _view.AskWhereToSaveMetryki(suggestedName);
         if (path is null) return;
 
         try

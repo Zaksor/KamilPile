@@ -32,6 +32,7 @@ public interface IMainView
 
     // --- what the user has picked --------------------------------------
     DateTime? SelectedJournalDay { get; }
+    IReadOnlyList<DateTime> SelectedJournalDays { get; }
     IReadOnlyList<int> SelectedPileNumbers { get; }
 
     // --- filling the grids ---------------------------------------------
@@ -56,6 +57,7 @@ public interface IMainView
     event EventHandler AddSelectedPilesRequested;
     event EventHandler RemoveDayRequested;
     event EventHandler GenerateRequested;
+    event EventHandler GenerateSelectedDaysRequested;
     event EventHandler OpenOutputRequested;
     event EventHandler SettingsChanged;
     event EventHandler ConcreteFactorChanged;

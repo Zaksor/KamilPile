@@ -38,7 +38,8 @@ public sealed class MainForm : Form, IMainView
     private readonly DataGridView _gridPiles = NewGrid();
 
     private readonly Button _btnLoad = new() { Text = "Wczytaj tabelkę...", Dock = DockStyle.Fill, Height = 30 };
-    private readonly Button _btnGenerate = new() { Text = "Generuj metryki (.xlsx)", Dock = DockStyle.Fill, Height = 34, Enabled = false };
+    private readonly Button _btnGenerate = new() { Text = "Generuj metryki — wszystkie dni", Dock = DockStyle.Fill, Height = 34, Enabled = false };
+    private readonly Button _btnGenerateSelected = new() { Text = "Generuj metryki — zaznaczone dni", Dock = DockStyle.Fill, Height = 34, Enabled = false };
     private readonly Button _btnOpen = new() { Text = "Otwórz wygenerowany plik", Dock = DockStyle.Fill, Height = 34, Enabled = false };
     private readonly Label _lblStatus = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
 
@@ -79,7 +80,11 @@ public sealed class MainForm : Form, IMainView
 
     DateTime IMainView.JournalDate { get => _dtDay.Value.Date; set => _dtDay.Value = value; }
 
-    bool IMainView.CanGenerate { get => _btnGenerate.Enabled; set => _btnGenerate.Enabled = value; }
+    bool IMainView.CanGenerate
+    {
+        get => _btnGenerate.Enabled;
+        set => _btnGenerate.Enabled = _btnGenerateSelected.Enabled = value;
+    }
     bool IMainView.CanOpenOutput { get => _btnOpen.Enabled; set => _btnOpen.Enabled = value; }
 
     bool IMainView.Busy
@@ -89,13 +94,21 @@ public sealed class MainForm : Form, IMainView
         {
             Cursor = value ? Cursors.WaitCursor : Cursors.Default;
             _btnLoad.Enabled = !value;
-            _btnGenerate.Enabled = !value && _journal.Count > 0;
+            _btnGenerate.Enabled = _btnGenerateSelected.Enabled = !value && _journal.Count > 0;
             Application.DoEvents();
         }
     }
 
     DateTime? IMainView.SelectedJournalDay
         => _gridJournal.CurrentRow?.DataBoundItem is JournalEntry row ? row.Data : null;
+
+    IReadOnlyList<DateTime> IMainView.SelectedJournalDays => _gridJournal.SelectedRows
+        .Cast<DataGridViewRow>()
+        .Select(r => r.DataBoundItem)
+        .OfType<JournalEntry>()
+        .Select(e => e.Data)
+        .OrderBy(d => d)
+        .ToList();
 
     IReadOnlyList<int> IMainView.SelectedPileNumbers => _gridPiles.SelectedCells
         .Cast<DataGridViewCell>()
@@ -112,6 +125,7 @@ public sealed class MainForm : Form, IMainView
     public event EventHandler? AddSelectedPilesRequested;
     public event EventHandler? RemoveDayRequested;
     public event EventHandler? GenerateRequested;
+    public event EventHandler? GenerateSelectedDaysRequested;
     public event EventHandler? OpenOutputRequested;
     public event EventHandler? SettingsChanged;
     public event EventHandler? ConcreteFactorChanged;
@@ -130,6 +144,7 @@ public sealed class MainForm : Form, IMainView
         _btnAddSelected.Click += (_, _) => AddSelectedPilesRequested?.Invoke(this, EventArgs.Empty);
         _btnRemoveDay.Click += (_, _) => RemoveDayRequested?.Invoke(this, EventArgs.Empty);
         _btnGenerate.Click += (_, _) => GenerateRequested?.Invoke(this, EventArgs.Empty);
+        _btnGenerateSelected.Click += (_, _) => GenerateSelectedDaysRequested?.Invoke(this, EventArgs.Empty);
         _btnOpen.Click += (_, _) => OpenOutputRequested?.Invoke(this, EventArgs.Empty);
 
         _numFactor.ValueChanged += (_, _) => ConcreteFactorChanged?.Invoke(this, EventArgs.Empty);
@@ -397,6 +412,11 @@ public sealed class MainForm : Form, IMainView
     {
         var tabs = new TabControl { Dock = DockStyle.Fill };
 
+        // Whole rows, several at once (Ctrl/Shift): the selection is which days
+        // "Generuj metryki — zaznaczone dni" writes.
+        _gridJournal.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        _gridJournal.MultiSelect = true;
+
         var tabJournal = new TabPage("Dziennik (dni)");
         tabJournal.Controls.Add(_gridJournal);
         var tabPiles = new TabPage("Pale");
@@ -412,13 +432,15 @@ public sealed class MainForm : Form, IMainView
 
     private Control BuildActionBar()
     {
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, AutoSize = true, Padding = new Padding(0, 8, 0, 0) };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1, AutoSize = true, Padding = new Padding(0, 8, 0, 0) };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
         layout.Controls.Add(_lblStatus, 0, 0);
         layout.Controls.Add(_btnGenerate, 1, 0);
-        layout.Controls.Add(_btnOpen, 2, 0);
+        layout.Controls.Add(_btnGenerateSelected, 2, 0);
+        layout.Controls.Add(_btnOpen, 3, 0);
         return layout;
     }
 
