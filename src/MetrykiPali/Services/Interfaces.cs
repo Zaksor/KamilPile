@@ -20,8 +20,26 @@ public interface IMetrykaWriter
 /// </summary>
 public interface IProjectRepository
 {
-    /// <summary>The project reopened automatically on every start.</summary>
+    /// <summary>
+    /// Where the single project lived before there were several sites. Read
+    /// once, to turn it into the first site; never written to again.
+    /// </summary>
     string DefaultPath { get; }
+
+    /// <summary>The sites (budowy) kept by the app, by name, in alphabetical order.</summary>
+    IReadOnlyList<string> ListSites();
+
+    /// <summary>The file a site with this name is kept in.</summary>
+    string SitePath(string name);
+
+    /// <summary>Renames a site's file. Throws IOException if the name is taken.</summary>
+    void RenameSite(string name, string newName);
+
+    /// <summary>The site that was open when the app was last closed.</summary>
+    string? LastSite { get; set; }
+
+    /// <summary>The folder holding everything; opened for the user on request.</summary>
+    string DataDirectory { get; }
 
     ProjectState? Load(string path);
     void Save(string path, ProjectState state);

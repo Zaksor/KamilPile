@@ -39,6 +39,14 @@ internal sealed class FakeMainView : IMainView
     public void ShowJournal(IReadOnlyList<JournalEntry> entries) => Journal = entries;
     public void RefreshPiles() => PilesRefreshed++;
 
+    public IReadOnlyList<string> Sites { get; private set; } = Array.Empty<string>();
+    public string CurrentSite { get; private set; } = "";
+    public void ShowSites(IReadOnlyList<string> sites, string current)
+    {
+        Sites = sites;
+        CurrentSite = current;
+    }
+
     // --- what the presenter asked --------------------------------------
     public List<string> Errors { get; } = new();
     public List<string> Infos { get; } = new();
@@ -62,7 +70,21 @@ internal sealed class FakeMainView : IMainView
         return MetrykiPath;
     }
     public string? AskForProject() => ProjectPath;
-    public string? AskWhereToSaveProject() => SaveProjectPath;
+    public string? SuggestedProjectName { get; private set; }
+    public string? AskWhereToSaveProject(string suggestedName)
+    {
+        SuggestedProjectName = suggestedName;
+        return SaveProjectPath;
+    }
+
+    /// <summary>What the user types into the next text prompts, in order; null = Cancel.</summary>
+    public Queue<string?> TypedTexts { get; } = new();
+    public List<string> Prompts { get; } = new();
+    public string? AskForText(string title, string prompt, string initial)
+    {
+        Prompts.Add($"{title}: {initial}");
+        return TypedTexts.Count > 0 ? TypedTexts.Dequeue() : null;
+    }
 
     public void ShowError(string title, string message) => Errors.Add($"{title}: {message}");
     public void ShowInfo(string title, string message) => Infos.Add($"{title}: {message}");
@@ -89,9 +111,12 @@ internal sealed class FakeMainView : IMainView
     public event EventHandler? ConcretePlantChanged;
     public event EventHandler<PileEdited>? PileEdited;
     public event EventHandler<DayFactorEdited>? DayFactorEdited;
-    public event EventHandler? NewProjectRequested;
+    public event EventHandler<string>? SiteSelected;
+    public event EventHandler? NewSiteRequested;
+    public event EventHandler? RenameSiteRequested;
     public event EventHandler? OpenProjectRequested;
     public event EventHandler? SaveProjectAsRequested;
+    public event EventHandler? ShowDataFolderRequested;
     public event EventHandler? ViewClosing;
 
     public void ClickLoadSchedule() => LoadScheduleRequested?.Invoke(this, EventArgs.Empty);
@@ -132,7 +157,18 @@ internal sealed class FakeMainView : IMainView
     }
     public void EditPile(int rowIndex, string property) => PileEdited?.Invoke(this, new PileEdited(rowIndex, property));
     public void EditDayFactor(DateTime date, double factor) => DayFactorEdited?.Invoke(this, new DayFactorEdited(date, factor));
-    public void ClickNewProject() => NewProjectRequested?.Invoke(this, EventArgs.Empty);
+    public void PickSite(string name) => SiteSelected?.Invoke(this, name);
+    public void AddSite(params string?[] typed)
+    {
+        foreach (var t in typed) TypedTexts.Enqueue(t);
+        NewSiteRequested?.Invoke(this, EventArgs.Empty);
+    }
+    public void ClickRenameSite(params string?[] typed)
+    {
+        foreach (var t in typed) TypedTexts.Enqueue(t);
+        RenameSiteRequested?.Invoke(this, EventArgs.Empty);
+    }
+    public void ClickShowDataFolder() => ShowDataFolderRequested?.Invoke(this, EventArgs.Empty);
     public void ClickOpenProject() => OpenProjectRequested?.Invoke(this, EventArgs.Empty);
     public void ClickSaveProjectAs() => SaveProjectAsRequested?.Invoke(this, EventArgs.Empty);
     public void CloseWindow() => ViewClosing?.Invoke(this, EventArgs.Empty);
@@ -152,7 +188,28 @@ internal sealed class InMemoryProjectRepository : IProjectRepository
     private readonly Dictionary<string, string> _files = new();
 
     public string DefaultPath => @"pamiec\projekt.mpali";
+    public string DataDirectory => "pamiec";
     public int Saves { get; private set; }
+
+    private const string SitesPrefix = @"pamiec\budowy\";
+
+    public IReadOnlyList<string> ListSites() => _files.Keys
+        .Where(k => k.StartsWith(SitesPrefix))
+        .Select(k => k[SitesPrefix.Length..^".mpali".Length])
+        .OrderBy(n => n, StringComparer.Create(new System.Globalization.CultureInfo("pl-PL"), true))
+        .ToList();
+
+    public string SitePath(string name) => SitesPrefix + name + ".mpali";
+
+    public void RenameSite(string name, string newName)
+    {
+        if (_files.ContainsKey(SitePath(newName))) throw new IOException("zajęta");
+        _files[SitePath(newName)] = _files[SitePath(name)];
+        _files.Remove(SitePath(name));
+        if (LastSite == name) LastSite = newName;
+    }
+
+    public string? LastSite { get; set; }
     public int Backups { get; private set; }
 
     /// <summary>Set to make the next save fail, as a full or read-only disk would.</summary>

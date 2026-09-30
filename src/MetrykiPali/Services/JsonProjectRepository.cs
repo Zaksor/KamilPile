@@ -52,10 +52,62 @@ public sealed class JsonProjectRepository : IProjectRepository
     /// copy of the app points it elsewhere so it cannot touch the real journal.
     /// </param>
     public JsonProjectRepository(string? directory = null)
-        => DefaultPath = Path.Combine(directory ?? StandardDirectory, "projekt" + FileExtension);
+    {
+        DataDirectory = directory ?? StandardDirectory;
+        DefaultPath = Path.Combine(DataDirectory, "projekt" + FileExtension);
+    }
 
-    /// <summary>The project reopened automatically on every start.</summary>
+    public string DataDirectory { get; }
+
+    /// <summary>The single project from before there were sites; read once to make the first one.</summary>
     public string DefaultPath { get; }
+
+    // ---------------------------------------------------------------- sites
+
+    /// <summary>One .mpali file per site, named after it.</summary>
+    private string SitesDirectory => Path.Combine(DataDirectory, "budowy");
+
+    private string LastSiteFile => Path.Combine(DataDirectory, "ostatnia-budowa.txt");
+
+    private static readonly StringComparer PolishOrder =
+        StringComparer.Create(System.Globalization.CultureInfo.GetCultureInfo("pl-PL"), ignoreCase: true);
+
+    public IReadOnlyList<string> ListSites()
+    {
+        if (!Directory.Exists(SitesDirectory)) return Array.Empty<string>();
+
+        return Directory.GetFiles(SitesDirectory, "*" + FileExtension)
+            .Where(f => Path.GetExtension(f).Equals(FileExtension, StringComparison.OrdinalIgnoreCase))
+            .Select(f => Path.GetFileNameWithoutExtension(f))
+            .OrderBy(n => n, PolishOrder)
+            .ToList();
+    }
+
+    public string SitePath(string name) => Path.Combine(SitesDirectory, name + FileExtension);
+
+    public void RenameSite(string name, string newName)
+    {
+        var target = SitePath(newName);
+        if (File.Exists(target) && !string.Equals(name, newName, StringComparison.OrdinalIgnoreCase))
+            throw new IOException($"Budowa o nazwie \"{newName}\" już istnieje.");
+
+        File.Move(SitePath(name), target);
+        if (string.Equals(LastSite, name, StringComparison.OrdinalIgnoreCase)) LastSite = newName;
+    }
+
+    public string? LastSite
+    {
+        get
+        {
+            try { return File.Exists(LastSiteFile) ? File.ReadAllText(LastSiteFile).Trim() : null; }
+            catch (IOException) { return null; }
+        }
+        set
+        {
+            Directory.CreateDirectory(DataDirectory);
+            File.WriteAllText(LastSiteFile, value ?? "");
+        }
+    }
 
     public void Save(string path, ProjectState state)
     {

@@ -16,6 +16,14 @@ public sealed class MainForm : Form, IMainView
     private BindingList<Pile> _piles = new();
     private readonly BindingList<JournalEntry> _journal = new();
 
+    /// <summary>The last entry of the site list, which adds a site instead of opening one.</summary>
+    private const string NewSiteItem = "➕  Nowa budowa...";
+
+    private readonly ComboBox _cmbSite = new() { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
+    private readonly Button _btnNewSite = new() { Text = "Nowa budowa...", Dock = DockStyle.Fill };
+    private string _currentSite = "";
+    private bool _fillingSites;
+
     private readonly TextBox _txtSource = new() { ReadOnly = true, Dock = DockStyle.Fill };
     private readonly TextBox _txtBudowa = new() { Dock = DockStyle.Fill };
     private readonly TextBox _txtWykonawca = new() { Dock = DockStyle.Fill };
@@ -145,13 +153,33 @@ public sealed class MainForm : Form, IMainView
     public event EventHandler? ConcretePlantChanged;
     public event EventHandler<PileEdited>? PileEdited;
     public event EventHandler<DayFactorEdited>? DayFactorEdited;
-    public event EventHandler? NewProjectRequested;
+    public event EventHandler<string>? SiteSelected;
+    public event EventHandler? NewSiteRequested;
+    public event EventHandler? RenameSiteRequested;
     public event EventHandler? OpenProjectRequested;
     public event EventHandler? SaveProjectAsRequested;
+    public event EventHandler? ShowDataFolderRequested;
     public event EventHandler? ViewClosing;
 
     private void WireEvents()
     {
+        _btnNewSite.Click += (_, _) => NewSiteRequested?.Invoke(this, EventArgs.Empty);
+        _cmbSite.SelectedIndexChanged += (_, _) =>
+        {
+            if (_fillingSites || _cmbSite.SelectedItem is not string picked) return;
+
+            if (picked == NewSiteItem)
+            {
+                // Put the list back on the open site; the presenter refills it
+                // if a site is added.
+                SelectSite(_currentSite);
+                BeginInvoke(() => NewSiteRequested?.Invoke(this, EventArgs.Empty));
+                return;
+            }
+
+            BeginInvoke(() => SiteSelected?.Invoke(this, picked));
+        };
+
         _btnLoad.Click += (_, _) => LoadScheduleRequested?.Invoke(this, EventArgs.Empty);
         _btnAddDay.Click += (_, _) => AddDayRequested?.Invoke(this, EventArgs.Empty);
         _btnAddSelected.Click += (_, _) => AddSelectedPilesRequested?.Invoke(this, EventArgs.Empty);
@@ -294,6 +322,42 @@ public sealed class MainForm : Form, IMainView
 
     public void RefreshPiles() => _gridPiles.Refresh();
 
+    public void ShowSites(IReadOnlyList<string> sites, string current)
+    {
+        _fillingSites = true;
+        try
+        {
+            _cmbSite.Items.Clear();
+            foreach (var site in sites) _cmbSite.Items.Add(site);
+            _cmbSite.Items.Add(NewSiteItem);
+            _currentSite = current;
+            SelectSite(current);
+        }
+        finally
+        {
+            _fillingSites = false;
+        }
+
+        Text = $"Metryki pali — {current}" + (_testMarker ?? "");
+    }
+
+    private void SelectSite(string name)
+    {
+        var was = _fillingSites;
+        _fillingSites = true;
+        _cmbSite.SelectedItem = _cmbSite.Items.Contains(name) ? name : null;
+        _fillingSites = was;
+    }
+
+    private string? _testMarker;
+
+    /// <summary>Text kept at the end of the title whatever site is open (the test-copy marker).</summary>
+    public void SetTitleSuffix(string suffix)
+    {
+        _testMarker = suffix;
+        Text += suffix;
+    }
+
     // ------------------------------------------------- IMainView interaction
 
     public string? AskForSchedule()
@@ -329,15 +393,33 @@ public sealed class MainForm : Form, IMainView
         return dialog.ShowDialog(this) == DialogResult.OK ? dialog.FileName : null;
     }
 
-    public string? AskWhereToSaveProject()
+    public string? AskWhereToSaveProject(string suggestedName)
     {
         using var dialog = new SaveFileDialog
         {
-            Title = "Zapisz projekt jako",
-            Filter = $"Projekt metryk (*{JsonProjectRepository.FileExtension})|*{JsonProjectRepository.FileExtension}",
-            FileName = "projekt" + JsonProjectRepository.FileExtension
+            Title = "Zapisz kopię budowy jako",
+            Filter = $"Budowa — metryki pali (*{JsonProjectRepository.FileExtension})|*{JsonProjectRepository.FileExtension}",
+            FileName = suggestedName
         };
         return dialog.ShowDialog(this) == DialogResult.OK ? dialog.FileName : null;
+    }
+
+    public string? AskForText(string title, string prompt, string initial)
+    {
+        using var form = new Form
+        {
+            Text = title, FormBorderStyle = FormBorderStyle.FixedDialog, StartPosition = FormStartPosition.CenterParent,
+            MinimizeBox = false, MaximizeBox = false, ShowInTaskbar = false, ClientSize = new Size(460, 130)
+        };
+        var label = new Label { Text = prompt, Left = 12, Top = 12, Width = 436, Height = 36 };
+        var box = new TextBox { Text = initial, Left = 12, Top = 52, Width = 436 };
+        var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, Left = 272, Top = 90, Width = 85 };
+        var cancel = new Button { Text = "Anuluj", DialogResult = DialogResult.Cancel, Left = 363, Top = 90, Width = 85 };
+        form.Controls.AddRange(new Control[] { label, box, ok, cancel });
+        form.AcceptButton = ok;
+        form.CancelButton = cancel;
+
+        return form.ShowDialog(this) == DialogResult.OK ? box.Text : null;
     }
 
     public void ShowError(string title, string message)
@@ -351,7 +433,8 @@ public sealed class MainForm : Form, IMainView
 
     public void OpenExternally(string path)
     {
-        if (File.Exists(path)) Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        if (File.Exists(path) || Directory.Exists(path))
+            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
     }
 
     // --------------------------------------------------------------- layout
@@ -368,10 +451,14 @@ public sealed class MainForm : Form, IMainView
 
     private void BuildMenu()
     {
-        var file = new ToolStripMenuItem("&Projekt");
-        file.DropDownItems.Add("&Nowy", null, (_, _) => NewProjectRequested?.Invoke(this, EventArgs.Empty));
-        file.DropDownItems.Add("&Otwórz...", null, (_, _) => OpenProjectRequested?.Invoke(this, EventArgs.Empty));
-        file.DropDownItems.Add("Zapisz &jako...", null, (_, _) => SaveProjectAsRequested?.Invoke(this, EventArgs.Empty));
+        var file = new ToolStripMenuItem("&Budowa");
+        file.DropDownItems.Add("&Nowa budowa...", null, (_, _) => NewSiteRequested?.Invoke(this, EventArgs.Empty));
+        file.DropDownItems.Add("&Zmień nazwę budowy...", null, (_, _) => RenameSiteRequested?.Invoke(this, EventArgs.Empty));
+        file.DropDownItems.Add(new ToolStripSeparator());
+        file.DropDownItems.Add("&Dodaj budowę z pliku...", null, (_, _) => OpenProjectRequested?.Invoke(this, EventArgs.Empty));
+        file.DropDownItems.Add("Zapisz &kopię budowy jako...", null, (_, _) => SaveProjectAsRequested?.Invoke(this, EventArgs.Empty));
+        file.DropDownItems.Add(new ToolStripSeparator());
+        file.DropDownItems.Add("Pokaż &folder z danymi", null, (_, _) => ShowDataFolderRequested?.Invoke(this, EventArgs.Empty));
 
         var menu = new MenuStrip();
         menu.Items.Add(file);
@@ -403,12 +490,17 @@ public sealed class MainForm : Form, IMainView
 
     private Control BuildSourceBox()
     {
-        var box = new GroupBox { Text = "1. Plik wejściowy", Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(8) };
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, AutoSize = true };
+        var box = new GroupBox { Text = "1. Budowa i jej tabelka z palami", Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(8) };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 2, AutoSize = true };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
-        layout.Controls.Add(_txtSource, 0, 0);
-        layout.Controls.Add(_btnLoad, 1, 0);
+        layout.Controls.Add(new Label { Text = "Budowa:", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, Font = new Font(Font, FontStyle.Bold) }, 0, 0);
+        layout.Controls.Add(_cmbSite, 1, 0);
+        layout.Controls.Add(_btnNewSite, 2, 0);
+        layout.Controls.Add(new Label { Text = "Tabelka z palami:", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 1);
+        layout.Controls.Add(_txtSource, 1, 1);
+        layout.Controls.Add(_btnLoad, 2, 1);
         box.Controls.Add(layout);
         return box;
     }

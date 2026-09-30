@@ -22,6 +22,7 @@ public sealed class MainPresenter
     private ProjectState _project = new();
     private Journal _journal = new(new List<Pile>());
     private string _projectPath;
+    private string _siteName = "";
     private string? _lastOutput;
     private bool _loading;
 
@@ -50,26 +51,66 @@ public sealed class MainPresenter
         _view.ConcretePlantChanged += (_, _) => ConcretePlantChanged();
         _view.PileEdited += (_, edit) => PileEdited(edit);
         _view.DayFactorEdited += (_, edit) => DayFactorEdited(edit);
-        _view.NewProjectRequested += (_, _) => NewProject();
-        _view.OpenProjectRequested += (_, _) => OpenProject();
-        _view.SaveProjectAsRequested += (_, _) => SaveProjectAs();
+        _view.SiteSelected += (_, name) => SwitchSite(name);
+        _view.NewSiteRequested += (_, _) => NewSite();
+        _view.RenameSiteRequested += (_, _) => RenameSite();
+        _view.OpenProjectRequested += (_, _) => ImportSite();
+        _view.SaveProjectAsRequested += (_, _) => ExportSite();
+        _view.ShowDataFolderRequested += (_, _) => _view.OpenExternally(_repository.DataDirectory);
         _view.ViewClosing += (_, _) => SaveQuietly();
     }
 
     /// <summary>Where the project is currently being saved.</summary>
     public string ProjectPath => _projectPath;
 
+    /// <summary>The site (budowa) open now.</summary>
+    public string SiteName => _siteName;
+
     /// <summary>The file written by the last successful generation, if any.</summary>
     public string? LastOutput => _lastOutput;
 
     // ------------------------------------------------------------- start-up
 
-    /// <summary>Reopens the project from the last session, if there is one.</summary>
+    /// <summary>
+    /// Reopens the site that was open last. The first time, the single project
+    /// kept before there were sites becomes the first site - copied, so the old
+    /// file stays as it was.
+    /// </summary>
     public void Start()
     {
-        _repository.BackupOnce(_projectPath);
-        var restored = _repository.Load(_projectPath);
-        Adopt(restored ?? new ProjectState(), _projectPath);
+        var sites = _repository.ListSites();
+        if (sites.Count == 0)
+        {
+            var legacy = _repository.Load(_repository.DefaultPath);
+            var name = SiteNames.Clean(legacy?.Settings.Budowa) ?? SiteNames.Fallback;
+            _repository.Save(_repository.SitePath(name), legacy ?? new ProjectState());
+            sites = new[] { name };
+        }
+
+        var last = _repository.LastSite;
+        var open = sites.FirstOrDefault(s => string.Equals(s, last, StringComparison.OrdinalIgnoreCase)) ?? sites[0];
+        OpenSite(open);
+    }
+
+    private void OpenSite(string name)
+    {
+        var path = _repository.SitePath(name);
+        _repository.BackupOnce(path);
+        var restored = _repository.Load(path);
+
+        _siteName = name;
+        _lastOutput = null;
+        _view.CanOpenOutput = false;
+        Adopt(restored ?? new ProjectState(), path);
+
+        TryRemember(name);
+        _view.ShowSites(_repository.ListSites(), name);
+    }
+
+    private void TryRemember(string name)
+    {
+        try { _repository.LastSite = name; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* only a convenience */ }
     }
 
     private void Adopt(ProjectState project, string path)
@@ -405,26 +446,117 @@ public sealed class MainPresenter
         if (_lastOutput is not null) _view.OpenExternally(_lastOutput);
     }
 
-    // -------------------------------------------------------------- project
+    // ---------------------------------------------------------------- sites
 
-    private void NewProject()
+    private void SwitchSite(string name)
     {
-        if (!_view.Confirm("Nowy projekt",
-                "Rozpocząć nowy projekt? Bieżący dziennik zostanie wyczyszczony " +
-                "(zapisany plik pozostanie na dysku)."))
-            return;
+        if (string.Equals(name, _siteName, StringComparison.OrdinalIgnoreCase)) return;
+        if (!_repository.ListSites().Contains(name, StringComparer.OrdinalIgnoreCase)) return;
 
-        _lastOutput = null;
-        _view.CanOpenOutput = false;
-
-        // Start the empty project back in the default slot. Keeping the current
-        // path would overwrite the file the user had just saved this site to -
-        // the opposite of what the question above promises.
-        Adopt(new ProjectState(), _repository.DefaultPath);
-        Save();
+        SaveQuietly();
+        OpenSite(name);
+        _view.StatusText = $"Otwarto budowę \"{name}\".   |   {Summary()}";
     }
 
-    private void OpenProject()
+    /// <summary>
+    /// Adds a site and switches to it. The new site starts with no schedule and
+    /// no journal, but keeps the contractor, method, plant and coefficient of
+    /// the current one - they rarely change from site to site.
+    /// </summary>
+    private void NewSite()
+    {
+        var name = AskForSiteName("Nowa budowa", "Nazwa nowej budowy (np. adres albo nazwa inwestycji):", "");
+        if (name is null) return;
+
+        SaveQuietly();
+        CaptureSettings();
+
+        var current = _project.Settings;
+        var fresh = new ProjectState
+        {
+            Settings = new MetrykaSettings
+            {
+                Budowa = name,
+                Wykonawca = current.Wykonawca,
+                Metoda = current.Metoda,
+                Betoniarnia = current.Betoniarnia,
+                Firma = current.Firma,
+                DokumentacjaNaglowek = current.DokumentacjaNaglowek,
+                ConcreteFactor = current.ConcreteFactor,
+                PilesPerPage = current.PilesPerPage,
+                Format = current.Format
+            }
+        };
+
+        try
+        {
+            _repository.Save(_repository.SitePath(name), fresh);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _view.ShowError("Nie udało się utworzyć budowy", ex.Message);
+            return;
+        }
+
+        OpenSite(name);
+        _view.StatusText = $"Utworzono budowę \"{name}\". Wczytaj jej tabelkę z palami.";
+    }
+
+    private void RenameSite()
+    {
+        var name = AskForSiteName("Zmień nazwę budowy", "Nowa nazwa budowy:", _siteName, allowCurrent: true);
+        if (name is null || name == _siteName) return;
+
+        SaveQuietly();
+        try
+        {
+            _repository.RenameSite(_siteName, name);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _view.ShowError("Nie udało się zmienić nazwy", ex.Message);
+            return;
+        }
+
+        _siteName = name;
+        _projectPath = _repository.SitePath(name);
+        TryRemember(name);
+        _view.ShowSites(_repository.ListSites(), name);
+        _view.StatusText = $"Zmieniono nazwę budowy na \"{name}\".";
+    }
+
+    /// <summary>Asks for a site name until it is usable and free, or the user gives up.</summary>
+    private string? AskForSiteName(string title, string prompt, string initial, bool allowCurrent = false)
+    {
+        var text = initial;
+        while (true)
+        {
+            text = _view.AskForText(title, prompt, text);
+            if (text is null) return null;
+
+            var name = SiteNames.Clean(text);
+            if (name is null)
+            {
+                _view.ShowError(title, "Podaj nazwę budowy.");
+                continue;
+            }
+
+            var taken = _repository.ListSites().Where(s => !(allowCurrent && string.Equals(s, _siteName, StringComparison.OrdinalIgnoreCase)));
+            if (taken.Contains(name, StringComparer.OrdinalIgnoreCase))
+            {
+                _view.ShowError(title, $"Budowa o nazwie \"{name}\" już istnieje. Wybierz ją z listy albo podaj inną nazwę.");
+                continue;
+            }
+
+            return name;
+        }
+    }
+
+    /// <summary>
+    /// Brings a site saved as a file (from another computer, or a copy made with
+    /// "Zapisz kopię budowy") into the list and opens it.
+    /// </summary>
+    private void ImportSite()
     {
         var path = _view.AskForProject();
         if (path is null) return;
@@ -432,21 +564,36 @@ public sealed class MainPresenter
         var loaded = _repository.Load(path);
         if (loaded is null)
         {
-            _view.ShowError("Błąd", "Nie udało się odczytać tego pliku projektu.");
+            _view.ShowError("Błąd", "Nie udało się odczytać tego pliku budowy.");
             return;
         }
 
-        Adopt(loaded, path);
+        var name = SiteNames.Unique(
+            SiteNames.Clean(Path.GetFileNameWithoutExtension(path)) ?? SiteNames.Fallback,
+            _repository.ListSites());
+
+        SaveQuietly();
+        _repository.Save(_repository.SitePath(name), loaded);
+        OpenSite(name);
+        _view.StatusText = $"Dodano budowę \"{name}\" z pliku {Path.GetFileName(path)}.";
     }
 
-    private void SaveProjectAs()
+    /// <summary>Writes a copy of the open site to a file of the user's choice; the site stays where it is.</summary>
+    private void ExportSite()
     {
-        var path = _view.AskWhereToSaveProject();
+        var path = _view.AskWhereToSaveProject(_siteName + JsonProjectRepository.FileExtension);
         if (path is null) return;
 
-        _projectPath = path;
-        Save();
-        _view.StatusText = "Zapisano projekt: " + path;
+        try
+        {
+            Save();
+            _repository.Save(path, _project);
+            _view.StatusText = "Zapisano kopię budowy: " + path;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _view.ShowError("Nie udało się zapisać kopii", ex.Message);
+        }
     }
 
     // --------------------------------------------------------------- saving
