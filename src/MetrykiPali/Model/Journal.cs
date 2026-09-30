@@ -65,24 +65,33 @@ public sealed class Journal
     /// Applies a plan and returns how many piles were logged. The piles take
     /// the day's coefficient: the one it already has if piles were logged to it
     /// before, otherwise <paramref name="factor"/> - the value in the field now.
-    /// A day therefore never mixes two coefficients.
+    /// A day therefore never mixes two coefficients. On a day worked out from
+    /// the concrete used, the day's total is shared again over all its piles -
+    /// and over what is left of any day a pile was moved from.
     /// </summary>
     public int Apply(JournalPlan plan, double factor)
     {
         var dayFactor = FactorOf(plan.Date) ?? factor;
+        var dayUsed = ConcreteUsedOf(plan.Date);
         var byNumber = _piles.ToDictionary(p => p.Number);
+        var touched = new HashSet<DateTime> { plan.Date };
         var applied = 0;
 
         foreach (var number in plan.Known)
         {
             if (!byNumber.TryGetValue(number, out var pile)) continue;
-            if (pile.Executed?.Date != plan.Date) pile.MetrykaGenerated = null;   // a new day: no metryka yet
+            if (pile.Executed?.Date != plan.Date)
+            {
+                if (pile.Executed is { } from) touched.Add(from.Date);
+                pile.MetrykaGenerated = null;   // a new day: no metryka yet
+            }
             pile.Executed = plan.Date;
             pile.ConcreteFactor = dayFactor;
-            RecalculateConcrete(pile, factor);
+            pile.DayConcreteUsed = dayUsed;
             applied++;
         }
 
+        foreach (var date in touched) RecalculateDay(date, factor);
         return applied;
     }
 
@@ -99,6 +108,7 @@ public sealed class Journal
         {
             pile.Executed = null;
             pile.ConcreteFactor = null;
+            pile.DayConcreteUsed = null;
             pile.MetrykaGenerated = null;
             RecalculateConcrete(pile, factor);
             cleared++;
@@ -111,20 +121,81 @@ public sealed class Journal
     public double? FactorOf(DateTime date)
         => _piles.FirstOrDefault(p => p.Executed?.Date == date.Date)?.ConcreteFactor;
 
-    /// <summary>Changes one day's coefficient and recomputes that day's piles only.</summary>
+    /// <summary>The theoretical volume of a day's piles, m3 - what the concrete used is measured against.</summary>
+    public double TheoreticalVolumeOf(DateTime date)
+        => DayPiles(date).Sum(p => PileMath.TheoreticalVolume(p.Diameter, p.ActualLength));
+
+    /// <summary>The concrete used on a day worked out that way, or null.</summary>
+    public double? ConcreteUsedOf(DateTime date)
+        => _piles.FirstOrDefault(p => p.Executed?.Date == date.Date)?.DayConcreteUsed;
+
+    /// <summary>
+    /// Changes one day's coefficient and recomputes that day's piles only. A
+    /// day that was worked out from the concrete used goes back to the coefficient.
+    /// </summary>
     public int SetDayFactor(DateTime date, double factor)
     {
-        var changed = 0;
-
-        foreach (var pile in _piles.Where(p => p.Executed?.Date == date.Date))
+        var day = DayPiles(date);
+        foreach (var pile in day)
         {
-            if (pile.ConcreteFactor != factor) pile.MetrykaGenerated = null;   // the printed volume is out of date
+            if (pile.ConcreteFactor != factor || pile.DayConcreteUsed is not null)
+                pile.MetrykaGenerated = null;   // the printed volume is out of date
             pile.ConcreteFactor = factor;
-            RecalculateConcrete(pile, factor);
-            changed++;
+            pile.DayConcreteUsed = null;
         }
 
-        return changed;
+        RecalculateDay(date, factor);
+        return day.Count;
+    }
+
+    /// <summary>
+    /// Works a day out from the concrete used on it: <paramref name="total"/> m3
+    /// shared among its piles by volume. Null goes back to the day's coefficient.
+    /// </summary>
+    public int SetDayConcreteUsed(DateTime date, double? total, double factor)
+    {
+        var day = DayPiles(date);
+        foreach (var pile in day) pile.DayConcreteUsed = total;
+
+        RecalculateDay(date, factor);
+        return day.Count;
+    }
+
+    private List<Pile> DayPiles(DateTime date)
+        => _piles.Where(p => p.Executed?.Date == date.Date).OrderBy(p => p.Number).ToList();
+
+    /// <summary>
+    /// Recomputes one day: its total shared by volume if it has one, otherwise
+    /// each pile by its coefficient. A pile whose figure changes loses its
+    /// "metryka written" mark - what was printed no longer matches it.
+    /// </summary>
+    public void RecalculateDay(DateTime date, double factor)
+    {
+        var day = DayPiles(date);
+        if (day.Count == 0) return;
+
+        if (day[0].DayConcreteUsed is { } total)
+        {
+            var shares = PileMath.Distribute(total, day.Select(p => (p.Diameter, p.ActualLength)).ToList());
+            for (var i = 0; i < day.Count; i++) SetConcrete(day[i], shares[i]);
+            return;
+        }
+
+        foreach (var pile in day)
+            SetConcrete(pile, PileMath.Concrete(pile.Diameter, pile.ActualLength, pile.ConcreteFactor ?? factor));
+    }
+
+    /// <summary>Recomputes every logged day - after a corrected schedule is loaded.</summary>
+    public void RecalculateDays(double factor)
+    {
+        foreach (var day in Days()) RecalculateDay(day.Date, factor);
+    }
+
+    private static void SetConcrete(Pile pile, double concrete)
+    {
+        if (pile.Concrete == concrete) return;
+        pile.Concrete = concrete;
+        pile.MetrykaGenerated = null;
     }
 
     // -------------------------------------------------------------- metryki
@@ -186,13 +257,26 @@ public sealed class Journal
             Pale = PileNumbers.Format(day.Piles.Select(p => p.Number)),
             Ilosc = day.Piles.Count,
             Beton = Math.Round(day.Piles.Sum(p => p.Concrete), 2),
-            Wsp = day.Piles[0].ConcreteFactor ?? 0,
+            Wsp = EffectiveFactor(day.Piles),
+            Zuzyto = day.Piles[0].DayConcreteUsed,
             Strony = (int)Math.Ceiling(day.Piles.Count / (double)perPage),
             Metryki = GeneratedState(day.Piles)
         }).ToList();
 
         if (newestFirst) entries.Reverse();
         return entries;
+    }
+
+    /// <summary>
+    /// The day's coefficient, or for a day worked out from the concrete used,
+    /// what that amounts to - a quick check the figure typed in is sensible.
+    /// </summary>
+    private static double EffectiveFactor(IReadOnlyList<Pile> piles)
+    {
+        if (piles[0].DayConcreteUsed is not { } used) return piles[0].ConcreteFactor ?? 0;
+
+        var theoretical = piles.Sum(p => PileMath.TheoreticalVolume(p.Diameter, p.ActualLength));
+        return theoretical > 0 ? Math.Round(used / theoretical, 2) : 0;
     }
 
     /// <summary>"12.09.2026" when every pile was written then (or later), "nie", or "częściowo".</summary>
@@ -219,7 +303,12 @@ public sealed class Journal
     /// its own coefficient if it has one and <paramref name="factor"/> otherwise.
     /// </summary>
     public void RecalculateConcrete(Pile pile, double factor)
-        => pile.Concrete = PileMath.Concrete(pile.Diameter, pile.ActualLength, pile.ConcreteFactor ?? factor);
+    {
+        // A logged pile is recomputed with its day: on a day worked out from
+        // the concrete used, one pile's length changes every pile's share.
+        if (pile.Executed is { } date) RecalculateDay(date, factor);
+        else pile.Concrete = PileMath.Concrete(pile.Diameter, pile.ActualLength, factor);
+    }
 
     public void SetConcretePlant(string plant)
     {

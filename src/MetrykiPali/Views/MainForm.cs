@@ -67,6 +67,18 @@ public sealed class MainForm : Form, IMainView
         Items = { "po lewej", "na środku", "po prawej" }, SelectedIndex = 1
     };
 
+    private readonly ComboBox _cmbConcreteMode = new()
+    {
+        DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill,
+        Items = { "ze współczynnika", "z ilości zużytej w dniu" }, SelectedIndex = 0
+    };
+    private readonly NumericUpDown _numUsed = new()
+    {
+        DecimalPlaces = 2, Increment = 0.5m, Minimum = 0m, Maximum = (decimal)MainPresenter.MaxDayConcrete, Width = 90,
+        Margin = new Padding(3, 3, 3, 3)
+    };
+    private readonly Label _lblUsed = new() { Text = "m³ betonu zużytego tego dnia (0 = wpiszę później)", AutoSize = true, Margin = new Padding(3, 6, 12, 3) };
+
     private readonly ComboBox _cmbJournalOrder = new()
     {
         DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill,
@@ -128,6 +140,19 @@ public sealed class MainForm : Form, IMainView
         set => _cmbFooterPosition.SelectedIndex = (int)value;
     }
 
+    // Item order follows the enum: 0 = Factor, 1 = Measured.
+    ConcreteMode IMainView.ConcreteMode
+    {
+        get => _cmbConcreteMode.SelectedIndex == 1 ? ConcreteMode.Measured : ConcreteMode.Factor;
+        set => _cmbConcreteMode.SelectedIndex = value == ConcreteMode.Measured ? 1 : 0;
+    }
+
+    double? IMainView.JournalConcreteUsed
+    {
+        get => _numUsed.Value > 0 ? (double)_numUsed.Value : null;
+        set => _numUsed.Value = value is { } v ? Math.Clamp((decimal)v, _numUsed.Minimum, _numUsed.Maximum) : 0;
+    }
+
     bool IMainView.JournalNewestFirst
     {
         get => _cmbJournalOrder.SelectedIndex == 1;
@@ -187,6 +212,8 @@ public sealed class MainForm : Form, IMainView
     public event EventHandler? ConcretePlantChanged;
     public event EventHandler<PileEdited>? PileEdited;
     public event EventHandler<DayFactorEdited>? DayFactorEdited;
+    public event EventHandler<DayConcreteEdited>? DayConcreteEdited;
+    public event EventHandler? ConcreteModeChanged;
     public event EventHandler? MissingMetrykiRequested;
     public event EventHandler? JournalOrderChanged;
     public event EventHandler? FooterImageRequested;
@@ -256,13 +283,27 @@ public sealed class MainForm : Form, IMainView
         _gridJournal.CellValueChanged += (_, e) =>
         {
             if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
-            if (_gridJournal.Columns[e.ColumnIndex].DataPropertyName != nameof(JournalEntry.Wsp)) return;
             if (_gridJournal.Rows[e.RowIndex].DataBoundItem is not JournalEntry entry) return;
 
             // The presenter answers by refilling this grid, which cannot happen
             // while the grid is still inside its own edit - so hand it over after.
-            var edit = new DayFactorEdited(entry.Data, entry.Wsp);
-            BeginInvoke(() => DayFactorEdited?.Invoke(this, edit));
+            switch (_gridJournal.Columns[e.ColumnIndex].DataPropertyName)
+            {
+                case nameof(JournalEntry.Wsp):
+                    var factor = new DayFactorEdited(entry.Data, entry.Wsp);
+                    BeginInvoke(() => DayFactorEdited?.Invoke(this, factor));
+                    break;
+                case nameof(JournalEntry.Zuzyto):
+                    var used = new DayConcreteEdited(entry.Data, entry.Zuzyto);
+                    BeginInvoke(() => DayConcreteEdited?.Invoke(this, used));
+                    break;
+            }
+        };
+
+        _cmbConcreteMode.SelectedIndexChanged += (_, _) =>
+        {
+            ShowConcreteUsedField();
+            ConcreteModeChanged?.Invoke(this, EventArgs.Empty);
         };
 
         _gridJournal.DataError += (_, e) =>
@@ -359,14 +400,26 @@ public sealed class MainForm : Form, IMainView
         if (_gridJournal.Columns[nameof(JournalEntry.Data)] is { } date)
         {
             date.DefaultCellStyle.Format = "dd.MM.yyyy";
-            date.FillWeight = 40;
+            date.FillWeight = 60;
         }
         if (_gridJournal.Columns[nameof(JournalEntry.Pale)] is { } pale) pale.FillWeight = 200;
 
-        // Only the day's coefficient can be edited here; everything else is derived.
+        // Only the day's coefficient and its concrete used can be edited here;
+        // everything else is derived.
         _gridJournal.ReadOnly = false;
         foreach (DataGridViewColumn column in _gridJournal.Columns)
-            column.ReadOnly = column.DataPropertyName != nameof(JournalEntry.Wsp);
+            column.ReadOnly = column.DataPropertyName is not (nameof(JournalEntry.Wsp) or nameof(JournalEntry.Zuzyto));
+        if (_gridJournal.Columns[nameof(JournalEntry.Zuzyto)] is { } zuzyto)
+        {
+            zuzyto.HeaderText = "Zużyto [m3] (edytuj)";
+            zuzyto.DefaultCellStyle.Format = "0.00";
+            zuzyto.DefaultCellStyle.NullValue = "";
+            zuzyto.DefaultCellStyle.DataSourceNullValue = null;
+            zuzyto.DefaultCellStyle.BackColor = Color.LightYellow;
+            zuzyto.FillWeight = 90;
+            zuzyto.ToolTipText = "Ile betonu zużyto tego dnia (np. z WZ). Program rozdzieli go na pale według ich objętości. " +
+                                 "Wyczyść komórkę, aby wrócić do liczenia ze współczynnika.";
+        }
         if (_gridJournal.Columns[nameof(JournalEntry.Wsp)] is { } wsp)
         {
             wsp.DefaultCellStyle.Format = "0.00";
@@ -608,8 +661,7 @@ public sealed class MainForm : Form, IMainView
         AddField(layout, 2, "Metoda:", _txtMetoda, "Pali na stronę:", _numPerPage);
 
         // The footer: its text on one row, its picture on the next, across the box.
-        layout.Controls.Add(new Label { Text = "Stopka (tekst):", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 3);
-        layout.Controls.Add(_txtFooter, 1, 3);
+        AddField(layout, 3, "Stopka (tekst):", _txtFooter, "Beton liczony:", _cmbConcreteMode);
 
         _lblFooterImage.AutoSize = false;
         _lblFooterImage.Dock = DockStyle.None;
@@ -652,8 +704,17 @@ public sealed class MainForm : Form, IMainView
                    "Pal wpisany ponownie z inną datą zostanie przeniesiony.",
             Dock = DockStyle.Fill, ForeColor = SystemColors.GrayText, AutoSize = false
         };
-        layout.Controls.Add(hint, 3, 1);
-        layout.SetColumnSpan(hint, 2);
+        // Under the pile numbers: the concrete used that day (only when the day's
+        // concrete comes from it), then the hint.
+        hint.AutoSize = true;
+        hint.Dock = DockStyle.None;
+        hint.Margin = new Padding(3, 6, 3, 3);
+        _hint = hint;
+        var under = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = false, Size = new Size(100, 30), WrapContents = false, Margin = Padding.Empty };
+        under.Controls.AddRange(new Control[] { _numUsed, _lblUsed, hint });
+        layout.Controls.Add(under, 3, 1);
+        layout.SetColumnSpan(under, 2);
+        ShowConcreteUsedField();
         layout.Controls.Add(_btnRemoveDay, 5, 1);
         layout.Controls.Add(new Label { Text = "Kolejność dni:", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 1);
         layout.Controls.Add(_cmbJournalOrder, 1, 1);
@@ -708,6 +769,19 @@ public sealed class MainForm : Form, IMainView
             layout.SetRowSpan(control, 2);
         }
         return layout;
+    }
+
+    private Label? _hint;
+
+    private void ShowConcreteUsedField()
+    {
+        var measured = _cmbConcreteMode.SelectedIndex == 1;
+        _numUsed.Visible = _lblUsed.Visible = measured;
+        if (_hint is not null)
+            _hint.Text = measured
+                ? "Enter zatwierdza."
+                : "Zakresy i pojedyncze numery, np. \"1-10, 25, 30-33\". Enter zatwierdza. " +
+                  "Pal wpisany ponownie z inną datą zostanie przeniesiony.";
     }
 
     private static void AddField(TableLayoutPanel layout, int row, string leftLabel, Control left, string rightLabel, Control right)

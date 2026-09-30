@@ -51,6 +51,8 @@ public sealed class MainPresenter
         _view.ConcretePlantChanged += (_, _) => ConcretePlantChanged();
         _view.PileEdited += (_, edit) => PileEdited(edit);
         _view.DayFactorEdited += (_, edit) => DayFactorEdited(edit);
+        _view.DayConcreteEdited += (_, edit) => DayConcreteEdited(edit);
+        _view.ConcreteModeChanged += (_, _) => ConcreteModeChanged();
         _view.MissingMetrykiRequested += (_, _) => ShowMissingMetryki();
         _view.JournalOrderChanged += (_, _) => { RefreshJournal(); SaveQuietly(); };
         _view.FooterImageRequested += (_, _) => ChooseFooterImage();
@@ -144,6 +146,8 @@ public sealed class MainPresenter
             _view.FooterImagePosition = s.FooterImagePosition;
             _view.FooterImageLabel = FooterImageLabel(s);
             _view.JournalNewestFirst = s.JournalNewestFirst;
+            _view.ConcreteMode = s.ConcreteMode;
+            _view.JournalConcreteUsed = null;
             _view.JournalDate = s.Data == default ? DateTime.Today : s.Data;
 
             _view.ShowRanges(_project.Ranges);
@@ -181,6 +185,7 @@ public sealed class MainPresenter
 
             var fresh = PileSchedule.Expand(ranges, _project.Settings);
             var kept = PileSchedule.CarryOverDates(_project.Piles, fresh);
+            new Journal(fresh).RecalculateDays(_view.ConcreteFactor);
 
             _project.SourcePath = path;
             _project.Ranges = ranges;
@@ -268,11 +273,25 @@ public sealed class MainPresenter
 
         var added = _journal.Apply(plan, _view.ConcreteFactor);
 
+        // On the concrete-used method, the figure typed with the piles is the
+        // day's total - what was delivered that day, not an addition to it.
+        if (_view.ConcreteMode == ConcreteMode.Measured && _view.JournalConcreteUsed is { } used && used > 0
+            && ConfirmConcreteUsed(plan.Date, used))
+        {
+            _journal.SetDayConcreteUsed(plan.Date, Math.Round(used, 2), _view.ConcreteFactor);
+            _view.JournalConcreteUsed = null;
+        }
+
         RefreshJournal();
         Save();
 
-        _view.StatusText = $"Dodano {added} pali do dnia {plan.Date:dd.MM.yyyy} " +
-                           $"(wsp. betonu {_journal.FactorOf(plan.Date):0.00})." +
+        var how = _journal.ConcreteUsedOf(plan.Date) is { } total
+            ? $"beton zużyty {total:0.00} m³"
+            : _view.ConcreteMode == ConcreteMode.Measured
+                ? "wpisz ilość zużytego betonu w kolumnie \"Zużyto\""
+                : $"wsp. betonu {_journal.FactorOf(plan.Date):0.00}";
+
+        _view.StatusText = $"Dodano {added} pali do dnia {plan.Date:dd.MM.yyyy} ({how})." +
                            (plan.Moved.Count > 0 ? $" Przeniesiono {plan.Moved.Count}." : "") +
                            $"   |   {Summary()}";
         return true;
@@ -434,6 +453,72 @@ public sealed class MainPresenter
             _view.StatusText = $"Dzień {edit.Date:dd.MM.yyyy}: wsp. betonu {factor:0.00}, przeliczono {changed} pali.";
     }
 
+    private void DayConcreteEdited(DayConcreteEdited edit)
+    {
+        if (_loading) return;
+
+        if (edit.Total is not > 0)
+        {
+            _journal.SetDayConcreteUsed(edit.Date, null, _view.ConcreteFactor);
+            RefreshJournal();
+            SaveQuietly();
+            _view.StatusText = $"Dzień {edit.Date:dd.MM.yyyy}: beton liczony ze współczynnika {_journal.FactorOf(edit.Date):0.00}.";
+            return;
+        }
+
+        var total = Math.Round(edit.Total.Value, 2);
+        if (total > MaxDayConcrete)
+        {
+            _view.ShowError("Błędna ilość betonu", $"Ilość betonu z jednego dnia nie może przekraczać {MaxDayConcrete} m³.");
+            RefreshJournal();
+            return;
+        }
+
+        if (!ConfirmConcreteUsed(edit.Date, total))
+        {
+            RefreshJournal();
+            return;
+        }
+
+        var piles = _journal.SetDayConcreteUsed(edit.Date, total, _view.ConcreteFactor);
+        RefreshJournal();
+        SaveQuietly();
+        _view.StatusText = $"Dzień {edit.Date:dd.MM.yyyy}: {total:0.00} m³ betonu rozdzielono na {piles} pali według ich objętości.";
+    }
+
+    /// <summary>More than any day on a pile site could use; stops a slip of the keyboard.</summary>
+    public const double MaxDayConcrete = 10000;
+
+    /// <summary>
+    /// A typo in the concrete used would put wrong figures on every pile of the
+    /// day, so a total below the piles' theoretical volume, or above 2.5 times
+    /// it, is put to the user first.
+    /// </summary>
+    private bool ConfirmConcreteUsed(DateTime date, double total)
+    {
+        var theoretical = _journal.TheoreticalVolumeOf(date);
+        if (theoretical <= 0) return true;
+
+        var ratio = total / theoretical;
+        if (ratio is >= 1.0 and <= 2.5) return true;
+
+        return _view.Confirm("Sprawdź ilość betonu",
+            $"{total:0.00} m³ na dzień {date:dd.MM.yyyy} to {ratio:0.00} × objętość teoretyczna tych pali ({theoretical:0.00} m³).\n" +
+            (ratio < 1.0 ? "To mniej niż sama objętość otworów." : "To ponad dwa i pół raza więcej niż objętość otworów.") +
+            "\n\nZapisać mimo to?");
+    }
+
+    private void ConcreteModeChanged()
+    {
+        if (_loading) return;
+
+        SaveQuietly();
+        _view.StatusText = _view.ConcreteMode == ConcreteMode.Measured
+            ? "Beton z ilości zużytej: przy wpisywaniu dnia podaj ile betonu zużyto (albo wpisz to później w kolumnie \"Zużyto\"). " +
+              "Program rozdzieli go na pale według ich objętości."
+            : "Beton ze współczynnika: objętość teoretyczna × współczynnik dnia.";
+    }
+
     private void ConcretePlantChanged()
     {
         if (_loading) return;
@@ -590,6 +675,7 @@ public sealed class MainPresenter
                 FooterImageName = current.FooterImageName,
                 FooterImagePosition = current.FooterImagePosition,
                 JournalNewestFirst = current.JournalNewestFirst,
+                ConcreteMode = current.ConcreteMode,
                 ConcreteFactor = current.ConcreteFactor,
                 PilesPerPage = current.PilesPerPage,
                 Format = current.Format
@@ -719,6 +805,7 @@ public sealed class MainPresenter
         s.Firma = _view.FooterText.Trim();
         s.FooterImagePosition = _view.FooterImagePosition;
         s.JournalNewestFirst = _view.JournalNewestFirst;
+        s.ConcreteMode = _view.ConcreteMode;
         s.Data = _view.JournalDate.Date;
     }
 

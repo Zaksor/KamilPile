@@ -46,6 +46,14 @@ public sealed class Pile
     /// metryk?" goes by.
     /// </summary>
     public DateTime? MetrykaGenerated { get; set; }
+
+    /// <summary>
+    /// The concrete used on this pile's whole day, m3, when the day is worked
+    /// out from what was delivered rather than from a coefficient; the same on
+    /// every pile of the day. The day's total is then shared among its piles by
+    /// volume (<see cref="PileMath.Distribute"/>). Null: the coefficient applies.
+    /// </summary>
+    public double? DayConcreteUsed { get; set; }
 }
 
 /// <summary>A day of work: every pile poured on one date.</summary>
@@ -63,8 +71,14 @@ public sealed class JournalEntry
     public int Ilosc { get; set; }
     public double Beton { get; set; }
 
-    /// <summary>The day's concrete coefficient; the one column the user may edit.</summary>
+    /// <summary>
+    /// The day's concrete coefficient - the one set, or for a day worked out
+    /// from the concrete used, what that comes to (used / theoretical volume).
+    /// </summary>
     public double Wsp { get; set; }
+
+    /// <summary>The concrete used that day, m3, or null when the coefficient applies.</summary>
+    public double? Zuzyto { get; set; }
 
     public int Strony { get; set; }
 
@@ -98,6 +112,9 @@ public sealed class MetrykaSettings
     /// <summary>The journal grid lists the newest day first.</summary>
     public bool JournalNewestFirst { get; set; }
 
+    /// <summary>How a newly logged day's concrete is worked out.</summary>
+    public ConcreteMode ConcreteMode { get; set; } = ConcreteMode.Factor;
+
     /// <summary>Date proposed in the journal entry box; not written to the metryki.</summary>
     public DateTime Data { get; set; } = DateTime.Today;
 
@@ -112,6 +129,17 @@ public sealed class MetrykaSettings
 
     /// <summary>The file type the metryki were last generated as; offered again next time.</summary>
     public MetrykaFormat Format { get; set; } = MetrykaFormat.Xlsx;
+}
+
+/// <summary>How the concrete of a day's piles is worked out.</summary>
+[System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<ConcreteMode>))]
+public enum ConcreteMode
+{
+    /// <summary>Theoretical volume × the day's coefficient.</summary>
+    Factor,
+
+    /// <summary>The concrete used that day, shared among its piles by volume.</summary>
+    Measured
 }
 
 /// <summary>Where on the footer the picture sits; the page number stays right, the text left.</summary>

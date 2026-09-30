@@ -8,6 +8,9 @@ public sealed record PileEdited(int RowIndex, string PropertyName);
 /// <summary>The user typed a new concrete coefficient for a logged day.</summary>
 public sealed record DayFactorEdited(DateTime Date, double Factor);
 
+/// <summary>The user typed (or cleared) the concrete used on a logged day, m3.</summary>
+public sealed record DayConcreteEdited(DateTime Date, double? Total);
+
 /// <summary>
 /// The main window, as the presenter sees it.
 ///
@@ -31,6 +34,10 @@ public interface IMainView
     FooterPosition FooterImagePosition { get; set; }
     string FooterImageLabel { get; set; }
     bool JournalNewestFirst { get; set; }
+    ConcreteMode ConcreteMode { get; set; }
+
+    /// <summary>Concrete used on the day being entered, m3; null when left empty.</summary>
+    double? JournalConcreteUsed { get; set; }
     string MissingMetrykiText { get; set; }
     DateTime JournalDate { get; set; }
     string JournalPiles { get; set; }
@@ -82,6 +89,8 @@ public interface IMainView
     event EventHandler ConcretePlantChanged;
     event EventHandler<PileEdited> PileEdited;
     event EventHandler<DayFactorEdited> DayFactorEdited;
+    event EventHandler<DayConcreteEdited> DayConcreteEdited;
+    event EventHandler ConcreteModeChanged;
     event EventHandler MissingMetrykiRequested;
     event EventHandler JournalOrderChanged;
     event EventHandler FooterImageRequested;

@@ -9,6 +9,40 @@ public static class PileMath
     /// <summary>Concrete placed, m3, rounded the way the metryka reports it.</summary>
     public static double Concrete(double diameter, double length, double factor)
         => Math.Round(TheoreticalVolume(diameter, length) * factor, 2, MidpointRounding.AwayFromZero);
+
+    /// <summary>
+    /// Shares the concrete used on a day among its piles in proportion to each
+    /// pile's theoretical volume (diameter² × length), to two decimal places.
+    ///
+    /// Rounding every share on its own can leave the piles a cent or two short
+    /// of (or over) the figure from the delivery notes, so the shares are cut
+    /// to whole cents and the cents left over go to the piles whose shares
+    /// were cut the most. The shares then add up to the day's total exactly.
+    /// </summary>
+    public static double[] Distribute(double total, IReadOnlyList<(double Diameter, double Length)> piles)
+    {
+        var shares = new double[piles.Count];
+        if (piles.Count == 0) return shares;
+
+        var weights = piles.Select(p => TheoreticalVolume(p.Diameter, p.Length)).ToArray();
+        var sum = weights.Sum();
+        if (sum <= 0) weights = piles.Select(_ => 1.0).ToArray();   // no geometry: share equally
+        sum = weights.Sum();
+
+        var totalCents = (long)Math.Round(total * 100, MidpointRounding.AwayFromZero);
+        var exact = weights.Select(w => totalCents * w / sum).ToArray();
+        var cents = exact.Select(e => (long)Math.Floor(e)).ToArray();
+
+        var left = totalCents - cents.Sum();
+        foreach (var i in Enumerable.Range(0, piles.Count)
+                     .OrderByDescending(i => exact[i] - cents[i])
+                     .ThenBy(i => i)
+                     .Take((int)left))
+            cents[i]++;
+
+        for (var i = 0; i < shares.Length; i++) shares[i] = cents[i] / 100.0;
+        return shares;
+    }
 }
 
 /// <summary>Turns the ranges from the source table into individual piles.</summary>
@@ -78,6 +112,7 @@ public static class PileSchedule
             if (!byNumber.TryGetValue(pile.Number, out var old) || old.Executed is null) continue;
             pile.Executed = old.Executed;
             pile.ConcreteFactor = old.ConcreteFactor;
+            pile.DayConcreteUsed = old.DayConcreteUsed;   // shared out again by Journal.RecalculateDays
 
             // The metryka still stands only if the corrected schedule left the pile as it was.
             if (pile.Diameter == old.Diameter && pile.ActualLength == old.ActualLength)

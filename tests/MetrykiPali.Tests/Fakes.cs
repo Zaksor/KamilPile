@@ -21,6 +21,8 @@ internal sealed class FakeMainView : IMainView
     public string FooterImageLabel { get; set; } = "";
     public bool JournalNewestFirst { get; set; }
     public string MissingMetrykiText { get; set; } = "";
+    public ConcreteMode ConcreteMode { get; set; } = ConcreteMode.Factor;
+    public double? JournalConcreteUsed { get; set; }
 
     /// <summary>The file the image dialog returns; null means the user cancelled.</summary>
     public string? ImagePath { get; set; }
@@ -123,6 +125,8 @@ internal sealed class FakeMainView : IMainView
     public event EventHandler? ConcretePlantChanged;
     public event EventHandler<PileEdited>? PileEdited;
     public event EventHandler<DayFactorEdited>? DayFactorEdited;
+    public event EventHandler<DayConcreteEdited>? DayConcreteEdited;
+    public event EventHandler? ConcreteModeChanged;
     public event EventHandler? MissingMetrykiRequested;
     public event EventHandler? JournalOrderChanged;
     public event EventHandler? FooterImageRequested;
@@ -173,6 +177,19 @@ internal sealed class FakeMainView : IMainView
     }
     public void EditPile(int rowIndex, string property) => PileEdited?.Invoke(this, new PileEdited(rowIndex, property));
     public void EditDayFactor(DateTime date, double factor) => DayFactorEdited?.Invoke(this, new DayFactorEdited(date, factor));
+    public void EditDayConcrete(DateTime date, double? total) => DayConcreteEdited?.Invoke(this, new DayConcreteEdited(date, total));
+    public void ChangeConcreteMode(ConcreteMode mode)
+    {
+        ConcreteMode = mode;
+        ConcreteModeChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Logs a day with the concrete used typed next to the pile numbers.</summary>
+    public void LogDay(DateTime date, string piles, double concreteUsed)
+    {
+        JournalConcreteUsed = concreteUsed;
+        LogDay(date, piles);
+    }
     public void ClickMissingMetryki() => MissingMetrykiRequested?.Invoke(this, EventArgs.Empty);
     public void ChangeJournalOrder(bool newestFirst)
     {
