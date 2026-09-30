@@ -146,9 +146,6 @@ The **Dziennik (dni)** tab then shows one line per day:
 | 12.09.2022 | 1-10, 17-18 | 12 | 14.02 | 1,30 | 1 | 12.09.2022 |
 | 13.09.2022 | 11-16, 63-66, 77-84 | 18 | 24.18 | 1,30 | 2 | nie |
 
-**Kolejność dni** (or a click on the **Data** header) lists the newest day first
-or the oldest; the metryki themselves are always written in date order.
-
 **Metryki wygenerowane** shows when a day's metryki were written: a date,
 **nie**, or **częściowo** when piles were added to the day afterwards. A day
 also goes back to **nie** when its coefficient is changed, and a pile when its
@@ -433,7 +430,7 @@ dotnet test
 | `PileMathTests` | the formula, every length in the reference table, half-away-from-zero rounding |
 | `PileTableReaderTests` | csv/xlsx/pdf, comma *and* dot decimals, junk skipped, a file locked by Excel, unsupported types |
 | `DesignerTableTests` | designers' summary tables in three real layouts (.xls and .xlsx): `-` / `÷`, single piles, cm, cage columns, totals; steel soldier columns refused; gaps and duplicate numbers |
-| `JournalToolsTests` | which piles lack a metryka (undated, never generated, changed since), journal order, footer text and picture in the workbook (VML shape in the chosen section) and in the PDF |
+| `JournalToolsTests` | which piles lack a metryka (undated, never generated, changed since), footer text and picture in the workbook (VML shape in the chosen section) and in the PDF |
 | `MeasuredConcreteTests` | a day's concrete from what was used: shares by volume that add up to the cent, re-sharing when piles are added, moved or corrected, back to the coefficient, the sanity question, mixing both methods, restart and reload |
 | `PaginationTests` | days never share a page, an 18-pile day splits 12 + 6, date ordering |
 | `MetrykaWriterTests` | the produced workbook read back: label rows, 48-row blocks, per-page dates, page breaks, A4 fit-to-width, borders, an 80-page run |

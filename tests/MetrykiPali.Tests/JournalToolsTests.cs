@@ -135,36 +135,6 @@ public sealed class JournalToolsTests : IDisposable
         Assert.Equal(DateTime.Today.ToString("dd.MM.yyyy"), next.Journal[0].Metryki);
     }
 
-    // ------------------------------------------------------------ journal order
-
-    [Fact]
-    public void The_journal_can_list_the_newest_day_first_and_remembers_it()
-    {
-        _view.LogDay(D12, "1-5");
-        _view.LogDay(D13, "6-10");
-        Assert.Equal(new[] { D12, D13 }, _view.Journal.Select(e => e.Data));
-
-        _view.ChangeJournalOrder(newestFirst: true);
-        Assert.Equal(new[] { D13, D12 }, _view.Journal.Select(e => e.Data));
-
-        var next = new FakeMainView();
-        new MainPresenter(next, _reader, _writer, _repository).Start();
-        Assert.True(next.JournalNewestFirst);
-        Assert.Equal(new[] { D13, D12 }, next.Journal.Select(e => e.Data));
-    }
-
-    [Fact]
-    public void The_order_on_screen_does_not_change_the_order_of_the_metryki()
-    {
-        _view.LogDay(D12, "1-5");
-        _view.LogDay(D13, "6-10");
-        _view.ChangeJournalOrder(newestFirst: true);
-
-        _view.ClickGenerate();
-
-        Assert.Equal(new[] { D12, D13 }, _writer.Days.Select(d => d.Date));
-    }
-
     // ------------------------------------------------------------------ footer
 
     private string MakeImage(string name, int width = 300, int height = 100)

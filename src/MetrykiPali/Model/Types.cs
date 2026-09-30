@@ -109,9 +109,6 @@ public sealed class MetrykaSettings
 
     public FooterPosition FooterImagePosition { get; set; } = FooterPosition.Center;
 
-    /// <summary>The journal grid lists the newest day first.</summary>
-    public bool JournalNewestFirst { get; set; }
-
     /// <summary>How a newly logged day's concrete is worked out.</summary>
     public ConcreteMode ConcreteMode { get; set; } = ConcreteMode.Factor;
 

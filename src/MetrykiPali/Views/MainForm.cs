@@ -79,12 +79,6 @@ public sealed class MainForm : Form, IMainView
     };
     private readonly Label _lblUsed = new() { Text = "m³ betonu zużytego tego dnia (0 = wpiszę później)", AutoSize = true, Margin = new Padding(3, 6, 12, 3) };
 
-    private readonly ComboBox _cmbJournalOrder = new()
-    {
-        DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill,
-        Items = { "od najstarszego", "od najnowszego" }, SelectedIndex = 0
-    };
-
     public MainForm()
     {
         Text = "Metryki pali — generator dokumentacji powykonawczej";
@@ -153,12 +147,6 @@ public sealed class MainForm : Form, IMainView
         set => _numUsed.Value = value is { } v ? Math.Clamp((decimal)v, _numUsed.Minimum, _numUsed.Maximum) : 0;
     }
 
-    bool IMainView.JournalNewestFirst
-    {
-        get => _cmbJournalOrder.SelectedIndex == 1;
-        set => _cmbJournalOrder.SelectedIndex = value ? 1 : 0;
-    }
-
     bool IMainView.CanGenerate
     {
         get => _btnGenerate.Enabled;
@@ -215,7 +203,6 @@ public sealed class MainForm : Form, IMainView
     public event EventHandler<DayConcreteEdited>? DayConcreteEdited;
     public event EventHandler? ConcreteModeChanged;
     public event EventHandler? MissingMetrykiRequested;
-    public event EventHandler? JournalOrderChanged;
     public event EventHandler? FooterImageRequested;
     public event EventHandler? FooterImageCleared;
     public event EventHandler<string>? SiteSelected;
@@ -262,15 +249,6 @@ public sealed class MainForm : Form, IMainView
         _btnFooterImage.Click += (_, _) => FooterImageRequested?.Invoke(this, EventArgs.Empty);
         _btnFooterClear.Click += (_, _) => FooterImageCleared?.Invoke(this, EventArgs.Empty);
         _lnkMissing.LinkClicked += (_, _) => MissingMetrykiRequested?.Invoke(this, EventArgs.Empty);
-        _cmbJournalOrder.SelectedIndexChanged += (_, _) => JournalOrderChanged?.Invoke(this, EventArgs.Empty);
-
-        // Clicking the "Data" header flips the order, as users expect of a date column.
-        _gridJournal.ColumnHeaderMouseClick += (_, e) =>
-        {
-            if (_gridJournal.Columns[e.ColumnIndex].DataPropertyName != nameof(JournalEntry.Data)) return;
-            _cmbJournalOrder.SelectedIndex = 1 - _cmbJournalOrder.SelectedIndex;
-        };
-
         foreach (var box in new[] { _txtBudowa, _txtWykonawca, _txtMetoda, _txtFooter })
             box.Leave += (_, _) => SettingsChanged?.Invoke(this, EventArgs.Empty);
 
@@ -391,11 +369,9 @@ public sealed class MainForm : Form, IMainView
             [nameof(JournalEntry.Metryki)] = "Metryki wygenerowane"
         });
 
-        // The order is chosen with "Kolejność dni"; the grid's own sorting would fight it.
+        // Days are listed oldest first; header clicks do not re-sort the journal.
         foreach (DataGridViewColumn column in _gridJournal.Columns)
-            column.SortMode = DataGridViewColumnSortMode.Programmatic;
-        if (_gridJournal.Columns[nameof(JournalEntry.Data)] is { } dataColumn)
-            dataColumn.HeaderCell.SortGlyphDirection = _cmbJournalOrder.SelectedIndex == 1 ? SortOrder.Descending : SortOrder.Ascending;
+            column.SortMode = DataGridViewColumnSortMode.NotSortable;
 
         if (_gridJournal.Columns[nameof(JournalEntry.Data)] is { } date)
         {
@@ -403,6 +379,7 @@ public sealed class MainForm : Form, IMainView
             date.FillWeight = 60;
         }
         if (_gridJournal.Columns[nameof(JournalEntry.Pale)] is { } pale) pale.FillWeight = 200;
+        if (_gridJournal.Columns[nameof(JournalEntry.Beton)] is { } beton) beton.DefaultCellStyle.Format = "0.00";
 
         // Only the day's coefficient and its concrete used can be edited here;
         // everything else is derived.
@@ -716,8 +693,6 @@ public sealed class MainForm : Form, IMainView
         layout.SetColumnSpan(under, 2);
         ShowConcreteUsedField();
         layout.Controls.Add(_btnRemoveDay, 5, 1);
-        layout.Controls.Add(new Label { Text = "Kolejność dni:", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 1);
-        layout.Controls.Add(_cmbJournalOrder, 1, 1);
 
         box.Controls.Add(layout);
         return box;
