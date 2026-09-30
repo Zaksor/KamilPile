@@ -68,6 +68,14 @@ public sealed class MetrykaWriter : IMetrykaWriter
         }
 
         ws.PageSetup.PrintAreas.Add(1, 1, pages.Count * RowsPerBlock, LastDataColumn);
+
+        // Open on "Podgląd podziału stron", so where each printed page ends is
+        // visible straight away instead of only in the print preview. At 70 %
+        // a whole metryka fits a normal screen.
+        ws.SheetView.View = XLSheetViewOptions.PageBreakPreview;
+        ws.SheetView.ZoomScaleSheetLayoutView = 70;
+        ws.SheetView.ZoomScale = 70;
+
         wb.SaveAs(path);
     }
 

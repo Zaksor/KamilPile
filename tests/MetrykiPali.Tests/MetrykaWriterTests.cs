@@ -58,6 +58,18 @@ public sealed class MetrykaWriterTests : IDisposable
     // ----------------------------------------------------------------- shape
 
     [Fact]
+    public void Opens_in_page_break_preview_so_the_printed_pages_show()
+    {
+        var ws = Generate(Day(D12, Enumerable.Range(1, 12)), Day(D13, Enumerable.Range(13, 12)));
+
+        // ClosedXML writes the view but does not read it back, so look at the sheet XML.
+        using var zip = System.IO.Compression.ZipFile.OpenRead(_path);
+        using var reader = new StreamReader(zip.GetEntry("xl/worksheets/sheet1.xml")!.Open());
+        Assert.Contains("view=\"pageBreakPreview\"", reader.ReadToEnd());
+        Assert.Equal(new[] { 48 }, ws.PageSetup.RowBreaks);
+    }
+
+    [Fact]
     public void Writes_a_file_that_opens_as_a_workbook()
     {
         var ws = Generate(Day(D12, Enumerable.Range(1, 12)));
