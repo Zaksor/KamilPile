@@ -27,6 +27,11 @@ public interface IMainView
     double ConcreteFactor { get; set; }
     int PilesPerPage { get; set; }
     MetrykaFormat OutputFormat { get; set; }
+    string FooterText { get; set; }
+    FooterPosition FooterImagePosition { get; set; }
+    string FooterImageLabel { get; set; }
+    bool JournalNewestFirst { get; set; }
+    string MissingMetrykiText { get; set; }
     DateTime JournalDate { get; set; }
     string JournalPiles { get; set; }
     string StatusText { get; set; }
@@ -55,6 +60,10 @@ public interface IMainView
     void ShowInfo(string title, string message);
     bool Confirm(string title, string question);
     string? AskForText(string title, string prompt, string initial);
+    string? AskForImage();
+
+    /// <summary>A longer piece of text the user may want to read through or copy.</summary>
+    void ShowReport(string title, string text);
 
     /// <summary>Opens a file in its program, or a folder in Explorer.</summary>
     void OpenExternally(string path);
@@ -73,6 +82,10 @@ public interface IMainView
     event EventHandler ConcretePlantChanged;
     event EventHandler<PileEdited> PileEdited;
     event EventHandler<DayFactorEdited> DayFactorEdited;
+    event EventHandler MissingMetrykiRequested;
+    event EventHandler JournalOrderChanged;
+    event EventHandler FooterImageRequested;
+    event EventHandler FooterImageCleared;
     event EventHandler<string> SiteSelected;
     event EventHandler NewSiteRequested;
     event EventHandler RenameSiteRequested;

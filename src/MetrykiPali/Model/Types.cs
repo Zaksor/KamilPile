@@ -39,6 +39,13 @@ public sealed class Pile
     /// paper. Null while the pile is outstanding: it then follows the field.
     /// </summary>
     public double? ConcreteFactor { get; set; }
+
+    /// <summary>
+    /// When this pile's metryka was last written, or null if never - or not
+    /// since its day, coefficient or length changed. What "Które pale nie mają
+    /// metryk?" goes by.
+    /// </summary>
+    public DateTime? MetrykaGenerated { get; set; }
 }
 
 /// <summary>A day of work: every pile poured on one date.</summary>
@@ -60,6 +67,9 @@ public sealed class JournalEntry
     public double Wsp { get; set; }
 
     public int Strony { get; set; }
+
+    /// <summary>When the day's metryki were written: a date, "nie" or "częściowo".</summary>
+    public string Metryki { get; set; } = "";
 }
 
 /// <summary>Everything the generator needs besides the pile list itself.</summary>
@@ -69,8 +79,24 @@ public sealed class MetrykaSettings
     public string Wykonawca { get; set; } = "Greifbau sp. z o.o., ul. Jerozolimska 2/LU2, 30-555 Kraków";
     public string Metoda { get; set; } = "CFA (Wykonanego w technologii betonowania ciągłego)";
     public string Betoniarnia { get; set; } = "Bosta";
+    /// <summary>The footer text, bottom left of every page ("Stopka" in the window).</summary>
     public string Firma { get; set; } = "GREIFBAU SP. Z O.O.";
     public string DokumentacjaNaglowek { get; set; } = "DOKUMENTACJA POWYKONAWCZA";
+
+    /// <summary>
+    /// A picture in the footer of every page (a logo, a stamp), as PNG, or
+    /// null for none. Kept in the site file itself, so the site carries it
+    /// to another computer.
+    /// </summary>
+    public byte[]? FooterImage { get; set; }
+
+    /// <summary>The name of the file the footer picture came from, to show which it is.</summary>
+    public string? FooterImageName { get; set; }
+
+    public FooterPosition FooterImagePosition { get; set; } = FooterPosition.Center;
+
+    /// <summary>The journal grid lists the newest day first.</summary>
+    public bool JournalNewestFirst { get; set; }
 
     /// <summary>Date proposed in the journal entry box; not written to the metryki.</summary>
     public DateTime Data { get; set; } = DateTime.Today;
@@ -86,6 +112,15 @@ public sealed class MetrykaSettings
 
     /// <summary>The file type the metryki were last generated as; offered again next time.</summary>
     public MetrykaFormat Format { get; set; } = MetrykaFormat.Xlsx;
+}
+
+/// <summary>Where on the footer the picture sits; the page number stays right, the text left.</summary>
+[System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<FooterPosition>))]
+public enum FooterPosition
+{
+    Left,
+    Center,
+    Right
 }
 
 /// <summary>The file types the metryki can be written as.</summary>

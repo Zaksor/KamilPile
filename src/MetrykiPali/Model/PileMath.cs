@@ -78,6 +78,10 @@ public static class PileSchedule
             if (!byNumber.TryGetValue(pile.Number, out var old) || old.Executed is null) continue;
             pile.Executed = old.Executed;
             pile.ConcreteFactor = old.ConcreteFactor;
+
+            // The metryka still stands only if the corrected schedule left the pile as it was.
+            if (pile.Diameter == old.Diameter && pile.ActualLength == old.ActualLength)
+                pile.MetrykaGenerated = old.MetrykaGenerated;
             if (old.ConcreteFactor is { } factor)
                 pile.Concrete = PileMath.Concrete(pile.Diameter, pile.ActualLength, factor);
             kept++;

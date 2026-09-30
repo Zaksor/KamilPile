@@ -77,6 +77,7 @@ public sealed class MetrykaWriter : IMetrykaWriter
         ws.SheetView.ZoomScale = 70;
 
         wb.SaveAs(path);
+        ExcelFooterPicture.Add(path, settings);
     }
 
     /// <summary>Splits each day into pages of at most <paramref name="perPage"/> piles.</summary>

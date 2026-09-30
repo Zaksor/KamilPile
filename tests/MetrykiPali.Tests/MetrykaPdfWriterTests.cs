@@ -49,9 +49,9 @@ public sealed class MetrykaPdfWriterTests : IDisposable
     {
         var pages = PageTexts(Day(D12, Enumerable.Range(1, 12)), Day(D13, Enumerable.Range(13, 18)));
 
-        Assert.Contains("12/09/2022", pages[0]);
-        Assert.Contains("13/09/2022", pages[1]);
-        Assert.Contains("13/09/2022", pages[2]);
+        Assert.Contains("12.09.2022", pages[0]);
+        Assert.Contains("13.09.2022", pages[1]);
+        Assert.Contains("13.09.2022", pages[2]);
     }
 
     [Fact]
@@ -64,7 +64,8 @@ public sealed class MetrykaPdfWriterTests : IDisposable
         Assert.Contains("WYKONAWCA:", page);
         Assert.Contains("KIEROWNIK ROBÓT PALOWYCH:", page);
         Assert.Contains("Ilość betonu", page);
-        Assert.Contains("1.31", page);          // 0.4 m x 8 m, as Excel shows it
+        Assert.Contains("1,31", page);          // 0.4 m x 8 m, as Excel on a Polish Windows shows it
+        Assert.Contains("0,4", page);
         Assert.Contains("Bosta", page);
     }
 

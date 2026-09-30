@@ -51,6 +51,10 @@ public sealed class MainPresenter
         _view.ConcretePlantChanged += (_, _) => ConcretePlantChanged();
         _view.PileEdited += (_, edit) => PileEdited(edit);
         _view.DayFactorEdited += (_, edit) => DayFactorEdited(edit);
+        _view.MissingMetrykiRequested += (_, _) => ShowMissingMetryki();
+        _view.JournalOrderChanged += (_, _) => { RefreshJournal(); SaveQuietly(); };
+        _view.FooterImageRequested += (_, _) => ChooseFooterImage();
+        _view.FooterImageCleared += (_, _) => ClearFooterImage();
         _view.SiteSelected += (_, name) => SwitchSite(name);
         _view.NewSiteRequested += (_, _) => NewSite();
         _view.RenameSiteRequested += (_, _) => RenameSite();
@@ -136,6 +140,10 @@ public sealed class MainPresenter
             _view.ConcreteFactor = s.ConcreteFactor;
             _view.PilesPerPage = s.PilesPerPage;
             _view.OutputFormat = s.Format;
+            _view.FooterText = s.Firma;
+            _view.FooterImagePosition = s.FooterImagePosition;
+            _view.FooterImageLabel = FooterImageLabel(s);
+            _view.JournalNewestFirst = s.JournalNewestFirst;
             _view.JournalDate = s.Data == default ? DateTime.Today : s.Data;
 
             _view.ShowRanges(_project.Ranges);
@@ -291,10 +299,100 @@ public sealed class MainPresenter
 
     private void RefreshJournal()
     {
-        _view.ShowJournal(_journal.Entries(_view.PilesPerPage));
+        _view.ShowJournal(_journal.Entries(_view.PilesPerPage, _view.JournalNewestFirst));
         _view.RefreshPiles();
         _view.CanGenerate = _journal.Assigned > 0;
+
+        var missing = _journal.Missing();
+        var count = missing.Undated.Count + missing.Days.Sum(d => d.Numbers.Count);
+        _view.MissingMetrykiText = _journal.Total == 0 ? ""
+            : count == 0 ? "Wszystkie pale mają metryki ✓"
+            : $"Pale bez metryk: {count} — pokaż które";
+
         UpdateStatus();
+    }
+
+    // -------------------------------------------------------- missing report
+
+    private void ShowMissingMetryki()
+    {
+        if (_journal.Total == 0)
+        {
+            _view.ShowInfo("Brak danych", "Najpierw wczytaj tabelkę z palami.");
+            return;
+        }
+
+        _view.ShowReport("Które pale nie mają metryk", MissingReport(_journal.Missing()));
+    }
+
+    private string MissingReport(MissingMetryki missing)
+    {
+        var text = new System.Text.StringBuilder();
+        text.AppendLine($"Budowa: {_siteName}");
+        text.AppendLine($"Stan na {DateTime.Now:dd.MM.yyyy HH:mm}, pali w tabelce: {_journal.Total}");
+        text.AppendLine();
+
+        if (missing.None)
+        {
+            text.AppendLine("Wszystkie pale mają daty wykonania i wygenerowane metryki.");
+            return text.ToString();
+        }
+
+        if (missing.Undated.Count > 0)
+        {
+            text.AppendLine($"PALE BEZ DATY WYKONANIA (nie ma ich jeszcze w dzienniku): {missing.Undated.Count}");
+            text.AppendLine(PileNumbers.Format(missing.Undated));
+            text.AppendLine();
+        }
+
+        if (missing.Days.Count > 0)
+        {
+            text.AppendLine($"DNI W DZIENNIKU BEZ WYGENEROWANYCH METRYK: {missing.Days.Count}");
+            text.AppendLine("(metryk jeszcze nie generowano albo dzień zmieniono po ich wygenerowaniu)");
+            foreach (var day in missing.Days)
+                text.AppendLine($"  {day.Date:dd.MM.yyyy}  —  {day.Numbers.Count} z {day.DayCount} pali:  {PileNumbers.Format(day.Numbers)}");
+            text.AppendLine();
+        }
+        else
+        {
+            text.AppendLine("Wszystkie dni z dziennika mają wygenerowane metryki.");
+        }
+
+        return text.ToString();
+    }
+
+    // ---------------------------------------------------------------- footer
+
+    private static string FooterImageLabel(MetrykaSettings s)
+        => s.FooterImage is { Length: > 0 } ? s.FooterImageName ?? "obraz" : "brak";
+
+    private void ChooseFooterImage()
+    {
+        var path = _view.AskForImage();
+        if (path is null) return;
+
+        try
+        {
+            _project.Settings.FooterImage = FooterImage.Prepare(path);
+            _project.Settings.FooterImageName = Path.GetFileName(path);
+        }
+        catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException)
+        {
+            _view.ShowError("Nie udało się wczytać obrazu", ex.Message);
+            return;
+        }
+
+        _view.FooterImageLabel = FooterImageLabel(_project.Settings);
+        SaveQuietly();
+        _view.StatusText = $"Obraz w stopce: {_project.Settings.FooterImageName}. Pojawi się na każdej stronie metryk.";
+    }
+
+    private void ClearFooterImage()
+    {
+        _project.Settings.FooterImage = null;
+        _project.Settings.FooterImageName = null;
+        _view.FooterImageLabel = FooterImageLabel(_project.Settings);
+        SaveQuietly();
     }
 
     // ------------------------------------------------------------ recompute
@@ -351,7 +449,9 @@ public sealed class MainPresenter
         if (edit.RowIndex < 0 || edit.RowIndex >= _project.Piles.Count) return;
         if (edit.PropertyName is not (nameof(Pile.ActualLength) or nameof(Pile.Diameter))) return;
 
-        _journal.RecalculateConcrete(_project.Piles[edit.RowIndex], _view.ConcreteFactor);
+        var pile = _project.Piles[edit.RowIndex];
+        Journal.Invalidate(pile);
+        _journal.RecalculateConcrete(pile, _view.ConcreteFactor);
         RefreshJournal();
         SaveQuietly();
     }
@@ -423,6 +523,10 @@ public sealed class MainPresenter
             _lastOutput = path;
             _view.CanOpenOutput = true;
 
+            _journal.MarkGenerated(days, DateTime.Now);
+            RefreshJournal();
+            SaveQuietly();
+
             var pages = MetrykaWriter.Paginate(days, _project.Settings.PilesPerPage).Count;
             var piles = days.Sum(d => d.Piles.Count);
 
@@ -482,6 +586,10 @@ public sealed class MainPresenter
                 Betoniarnia = current.Betoniarnia,
                 Firma = current.Firma,
                 DokumentacjaNaglowek = current.DokumentacjaNaglowek,
+                FooterImage = current.FooterImage,
+                FooterImageName = current.FooterImageName,
+                FooterImagePosition = current.FooterImagePosition,
+                JournalNewestFirst = current.JournalNewestFirst,
                 ConcreteFactor = current.ConcreteFactor,
                 PilesPerPage = current.PilesPerPage,
                 Format = current.Format
@@ -608,6 +716,9 @@ public sealed class MainPresenter
         s.ConcreteFactor = _view.ConcreteFactor;
         s.PilesPerPage = _view.PilesPerPage;
         s.Format = _view.OutputFormat;
+        s.Firma = _view.FooterText.Trim();
+        s.FooterImagePosition = _view.FooterImagePosition;
+        s.JournalNewestFirst = _view.JournalNewestFirst;
         s.Data = _view.JournalDate.Date;
     }
 
