@@ -144,6 +144,7 @@ public sealed class MainForm : Form, IMainView
     public event EventHandler? PilesPerPageChanged;
     public event EventHandler? ConcretePlantChanged;
     public event EventHandler<PileEdited>? PileEdited;
+    public event EventHandler<DayFactorEdited>? DayFactorEdited;
     public event EventHandler? NewProjectRequested;
     public event EventHandler? OpenProjectRequested;
     public event EventHandler? SaveProjectAsRequested;
@@ -172,6 +173,25 @@ public sealed class MainForm : Form, IMainView
         {
             if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
             PileEdited?.Invoke(this, new PileEdited(e.RowIndex, _gridPiles.Columns[e.ColumnIndex].DataPropertyName));
+        };
+
+        _gridJournal.CellValueChanged += (_, e) =>
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            if (_gridJournal.Columns[e.ColumnIndex].DataPropertyName != nameof(JournalEntry.Wsp)) return;
+            if (_gridJournal.Rows[e.RowIndex].DataBoundItem is not JournalEntry entry) return;
+
+            // The presenter answers by refilling this grid, which cannot happen
+            // while the grid is still inside its own edit - so hand it over after.
+            var edit = new DayFactorEdited(entry.Data, entry.Wsp);
+            BeginInvoke(() => DayFactorEdited?.Invoke(this, edit));
+        };
+
+        _gridJournal.DataError += (_, e) =>
+        {
+            e.Cancel = true;
+            MessageBox.Show(this, "Wpisz liczbę, np. 1,25.", "Błędny współczynnik",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
         };
 
         _txtDayPiles.KeyDown += (_, e) =>
@@ -213,13 +233,21 @@ public sealed class MainForm : Form, IMainView
             [nameof(Pile.Concrete)] = "Beton [m3]",
             [nameof(Pile.ConcretePlant)] = "Betoniarnia",
             [nameof(Pile.Reinforcement)] = "Zbrojenie",
-            [nameof(Pile.Executed)] = "Data wykonania"
+            [nameof(Pile.Executed)] = "Data wykonania",
+            [nameof(Pile.ConcreteFactor)] = "Wsp. betonu"
         });
 
         if (_gridPiles.Columns[nameof(Pile.Executed)] is { } executed)
         {
             executed.DefaultCellStyle.Format = "dd.MM.yyyy";
             executed.ReadOnly = true;
+        }
+
+        // Set per day on the journal tab; shown here so each pile's volume can be traced.
+        if (_gridPiles.Columns[nameof(Pile.ConcreteFactor)] is { } factor)
+        {
+            factor.DefaultCellStyle.Format = "0.00";
+            factor.ReadOnly = true;
         }
     }
 
@@ -239,6 +267,7 @@ public sealed class MainForm : Form, IMainView
             [nameof(JournalEntry.Pale)] = "Pale",
             [nameof(JournalEntry.Ilosc)] = "Ilość",
             [nameof(JournalEntry.Beton)] = "Beton [m3]",
+            [nameof(JournalEntry.Wsp)] = "Wsp. betonu (edytuj)",
             [nameof(JournalEntry.Strony)] = "Stron"
         });
 
@@ -248,7 +277,19 @@ public sealed class MainForm : Form, IMainView
             date.FillWeight = 40;
         }
         if (_gridJournal.Columns[nameof(JournalEntry.Pale)] is { } pale) pale.FillWeight = 200;
-        _gridJournal.ReadOnly = true;
+
+        // Only the day's coefficient can be edited here; everything else is derived.
+        _gridJournal.ReadOnly = false;
+        foreach (DataGridViewColumn column in _gridJournal.Columns)
+            column.ReadOnly = column.DataPropertyName != nameof(JournalEntry.Wsp);
+        if (_gridJournal.Columns[nameof(JournalEntry.Wsp)] is { } wsp)
+        {
+            wsp.DefaultCellStyle.Format = "0.00";
+            wsp.DefaultCellStyle.BackColor = Color.LightYellow;
+            wsp.FillWeight = 90;
+            wsp.ToolTipText = "Kliknij dwukrotnie i wpisz nowy współczynnik tego dnia, np. 1,25. " +
+                              "Beton pali z tego dnia przeliczy się od razu; inne dni się nie zmienią.";
+        }
     }
 
     public void RefreshPiles() => _gridPiles.Refresh();
@@ -384,7 +425,7 @@ public sealed class MainForm : Form, IMainView
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30));
 
         AddField(layout, 0, "Budowa:", _txtBudowa, "Betoniarnia:", _txtBetoniarnia);
-        AddField(layout, 1, "Wykonawca:", _txtWykonawca, "Wsp. betonu:", _numFactor);
+        AddField(layout, 1, "Wykonawca:", _txtWykonawca, "Wsp. betonu (nowe dni):", _numFactor);
         AddField(layout, 2, "Metoda:", _txtMetoda, "Pali na stronę:", _numPerPage);
 
         box.Controls.Add(layout);

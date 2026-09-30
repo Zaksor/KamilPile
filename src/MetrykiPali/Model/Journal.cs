@@ -52,9 +52,15 @@ public sealed class Journal
         return new JournalPlan(date, known, unknown, moved);
     }
 
-    /// <summary>Applies a plan and returns how many piles were logged.</summary>
-    public int Apply(JournalPlan plan)
+    /// <summary>
+    /// Applies a plan and returns how many piles were logged. The piles take
+    /// the day's coefficient: the one it already has if piles were logged to it
+    /// before, otherwise <paramref name="factor"/> - the value in the field now.
+    /// A day therefore never mixes two coefficients.
+    /// </summary>
+    public int Apply(JournalPlan plan, double factor)
     {
+        var dayFactor = FactorOf(plan.Date) ?? factor;
         var byNumber = _piles.ToDictionary(p => p.Number);
         var applied = 0;
 
@@ -62,14 +68,19 @@ public sealed class Journal
         {
             if (!byNumber.TryGetValue(number, out var pile)) continue;
             pile.Executed = plan.Date;
+            pile.ConcreteFactor = dayFactor;
+            RecalculateConcrete(pile, factor);
             applied++;
         }
 
         return applied;
     }
 
-    /// <summary>Returns a day's piles to the pool of piles with no date.</summary>
-    public int RemoveDay(DateTime date)
+    /// <summary>
+    /// Returns a day's piles to the pool of piles with no date. They lose the
+    /// day's coefficient and follow <paramref name="factor"/> again.
+    /// </summary>
+    public int RemoveDay(DateTime date, double factor)
     {
         date = date.Date;
         var cleared = 0;
@@ -77,10 +88,49 @@ public sealed class Journal
         foreach (var pile in _piles.Where(p => p.Executed?.Date == date))
         {
             pile.Executed = null;
+            pile.ConcreteFactor = null;
+            RecalculateConcrete(pile, factor);
             cleared++;
         }
 
         return cleared;
+    }
+
+    /// <summary>The coefficient a logged day was given, or null for a day with no piles.</summary>
+    public double? FactorOf(DateTime date)
+        => _piles.FirstOrDefault(p => p.Executed?.Date == date.Date)?.ConcreteFactor;
+
+    /// <summary>Changes one day's coefficient and recomputes that day's piles only.</summary>
+    public int SetDayFactor(DateTime date, double factor)
+    {
+        var changed = 0;
+
+        foreach (var pile in _piles.Where(p => p.Executed?.Date == date.Date))
+        {
+            pile.ConcreteFactor = factor;
+            RecalculateConcrete(pile, factor);
+            changed++;
+        }
+
+        return changed;
+    }
+
+    /// <summary>
+    /// Gives logged piles that have no coefficient of their own - from a file
+    /// written before days had one - the project's coefficient. Their stored
+    /// volumes were computed with it, so nothing on paper changes.
+    /// </summary>
+    public int PinMissingFactors(double factor)
+    {
+        var pinned = 0;
+
+        foreach (var pile in _piles.Where(p => p.Executed is not null && p.ConcreteFactor is null))
+        {
+            pile.ConcreteFactor = factor;
+            pinned++;
+        }
+
+        return pinned;
     }
 
     /// <summary>The logged days, in date order, each with its piles in number order.</summary>
@@ -102,20 +152,27 @@ public sealed class Journal
             Pale = PileNumbers.Format(day.Piles.Select(p => p.Number)),
             Ilosc = day.Piles.Count,
             Beton = Math.Round(day.Piles.Sum(p => p.Concrete), 2),
+            Wsp = day.Piles[0].ConcreteFactor ?? 0,
             Strony = (int)Math.Ceiling(day.Piles.Count / (double)perPage)
         }).ToList();
     }
 
-    /// <summary>Recomputes every concrete volume after the coefficient changes.</summary>
+    /// <summary>
+    /// Recomputes the piles that follow the coefficient field - the outstanding
+    /// ones - after it changes. Logged days keep the coefficient they were given.
+    /// </summary>
     public void RecalculateConcrete(double factor)
     {
-        foreach (var pile in _piles)
-            pile.Concrete = PileMath.Concrete(pile.Diameter, pile.ActualLength, factor);
+        foreach (var pile in _piles.Where(p => p.ConcreteFactor is null))
+            RecalculateConcrete(pile, factor);
     }
 
-    /// <summary>Recomputes one pile, after its length or diameter was corrected.</summary>
+    /// <summary>
+    /// Recomputes one pile, e.g. after its length or diameter was corrected, with
+    /// its own coefficient if it has one and <paramref name="factor"/> otherwise.
+    /// </summary>
     public void RecalculateConcrete(Pile pile, double factor)
-        => pile.Concrete = PileMath.Concrete(pile.Diameter, pile.ActualLength, factor);
+        => pile.Concrete = PileMath.Concrete(pile.Diameter, pile.ActualLength, pile.ConcreteFactor ?? factor);
 
     public void SetConcretePlant(string plant)
     {

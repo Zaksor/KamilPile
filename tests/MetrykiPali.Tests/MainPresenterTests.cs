@@ -309,7 +309,7 @@ public class MainPresenterTests
     // ------------------------------------------------------------ recompute
 
     [Fact]
-    public void Changing_the_coefficient_recalculates_every_pile()
+    public void Changing_the_coefficient_recalculates_every_outstanding_pile()
     {
         LoadSchedule();
 
@@ -319,7 +319,7 @@ public class MainPresenterTests
     }
 
     [Fact]
-    public void Changing_the_coefficient_updates_the_journal_totals()
+    public void Changing_the_coefficient_leaves_days_already_in_the_journal_alone()
     {
         LoadSchedule();
         _view.LogDay(D12, "1-12");
@@ -327,7 +327,103 @@ public class MainPresenterTests
 
         _view.ChangeConcreteFactor(1.0);
 
-        Assert.True(_view.Journal[0].Beton < before);
+        Assert.Equal(before, _view.Journal[0].Beton);
+        Assert.Equal(1.30, _view.Journal[0].Wsp);
+        Assert.Contains("dni wpisanych od teraz", _view.StatusText);
+    }
+
+    [Fact]
+    public void Each_day_is_logged_with_the_coefficient_set_at_the_time()
+    {
+        LoadSchedule();
+        _view.LogDay(D12, "1-12");
+        _view.ChangeConcreteFactor(1.20);
+        _view.LogDay(D13, "13-24");
+        _view.MetrykiPath = @"C:\wyjscie\metryki.xlsx";
+
+        _view.ClickGenerate();
+
+        Assert.Equal(new[] { 1.30, 1.20 }, _view.Journal.Select(e => e.Wsp));
+        Assert.Equal(PileMath.Concrete(0.4, 7, 1.30), _writer.Days[0].Piles[0].Concrete);
+        Assert.Equal(PileMath.Concrete(0.4, 8, 1.20), _writer.Days[1].Piles[0].Concrete);
+    }
+
+    [Fact]
+    public void A_days_coefficient_can_be_corrected_in_the_journal()
+    {
+        LoadSchedule();
+        _view.LogDay(D12, "1-12");
+        _view.LogDay(D13, "13-24");
+
+        _view.EditDayFactor(D12, 1.45);
+
+        Assert.Equal(new[] { 1.45, 1.30 }, _view.Journal.Select(e => e.Wsp));
+        Assert.Equal(PileMath.Concrete(0.4, 7, 1.45), _view.Piles[0].Concrete);
+        Assert.Equal(PileMath.Concrete(0.4, 8, 1.30), _view.Piles[12].Concrete);
+    }
+
+    [Fact]
+    public void A_days_coefficient_outside_the_allowed_range_is_refused()
+    {
+        LoadSchedule();
+        _view.LogDay(D12, "1-12");
+
+        _view.EditDayFactor(D12, 0.5);
+
+        Assert.Contains(_view.Errors, e => e.Contains("Błędny współczynnik"));
+        Assert.Equal(1.30, _view.Journal[0].Wsp);
+    }
+
+    [Fact]
+    public void Each_days_coefficient_survives_a_restart()
+    {
+        LoadSchedule();
+        _view.LogDay(D12, "1-12");
+        _view.EditDayFactor(D12, 1.18);
+        _view.ChangeConcreteFactor(1.40);
+
+        var next = new FakeMainView();
+        new MainPresenter(next, _reader, _writer, _repository).Start();
+
+        Assert.Equal(1.18, next.Journal[0].Wsp);
+        Assert.Equal(PileMath.Concrete(0.4, 7, 1.18), next.Piles[0].Concrete);
+        Assert.Equal(1.40, next.ConcreteFactor);
+    }
+
+    [Fact]
+    public void Reloading_the_schedule_keeps_each_days_coefficient()
+    {
+        LoadSchedule();
+        _view.LogDay(D12, "1-12");
+        _view.EditDayFactor(D12, 1.18);
+
+        LoadSchedule(@"C:\budowa\tabelka-poprawiona.xlsx");
+
+        Assert.Equal(1.18, _view.Journal[0].Wsp);
+        Assert.Equal(PileMath.Concrete(0.4, 7, 1.18), _view.Piles[0].Concrete);
+    }
+
+    [Fact]
+    public void A_project_saved_before_per_day_coefficients_opens_with_its_volumes_unchanged()
+    {
+        // What a version 1 file holds: dates on the piles, one coefficient in the settings.
+        var legacy = new ProjectState
+        {
+            Version = 1,
+            Settings = new MetrykaSettings { ConcreteFactor = 1.25 },
+            Piles = { new Pile { Number = 1, Diameter = 0.4, DesignLength = 7, ActualLength = 7,
+                                 Concrete = PileMath.Concrete(0.4, 7, 1.25), Executed = D12 } }
+        };
+        var store = new InMemoryProjectRepository();
+        store.Save(store.DefaultPath, legacy);
+
+        var view = new FakeMainView();
+        new MainPresenter(view, _reader, _writer, store).Start();
+        view.ChangeConcreteFactor(1.00);
+
+        Assert.Equal(1.25, view.Journal[0].Wsp);
+        Assert.Equal(PileMath.Concrete(0.4, 7, 1.25), view.Piles[0].Concrete);
+        Assert.Equal(2, store.Load(store.DefaultPath)!.Version);
     }
 
     [Fact]

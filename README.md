@@ -231,8 +231,18 @@ pile:
 
 ⚠️ In the real records the ratio drifts between about **1.18 and 1.46** from day
 to day, because those are *measured* quantities, not calculated ones. 1.30 is a
-sensible default, not ground truth. Change **Wsp. betonu** to match a particular
-pour — every volume recalculates immediately.
+sensible default, not ground truth.
+
+**Every day keeps its own coefficient.** A day takes the value in **Wsp. betonu
+(nowe dni)** at the moment its first piles are logged, and keeps it: changing the
+field afterwards only affects days logged from then on (and piles with no date
+yet), so metryki already handed over are never silently rewritten. To correct one
+day, double-click its **Wsp. betonu (edytuj)** cell on the **Dziennik (dni)** tab
+— that day's volumes recalculate, the others stay as they were. The **Pale** tab
+shows which coefficient each pile was computed with.
+
+Projects saved by earlier versions open with every logged day pinned to the
+single coefficient they were saved with, so no volume changes on opening.
 
 ---
 

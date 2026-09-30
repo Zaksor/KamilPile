@@ -88,6 +88,7 @@ internal sealed class FakeMainView : IMainView
     public event EventHandler? PilesPerPageChanged;
     public event EventHandler? ConcretePlantChanged;
     public event EventHandler<PileEdited>? PileEdited;
+    public event EventHandler<DayFactorEdited>? DayFactorEdited;
     public event EventHandler? NewProjectRequested;
     public event EventHandler? OpenProjectRequested;
     public event EventHandler? SaveProjectAsRequested;
@@ -130,6 +131,7 @@ internal sealed class FakeMainView : IMainView
         ConcretePlantChanged?.Invoke(this, EventArgs.Empty);
     }
     public void EditPile(int rowIndex, string property) => PileEdited?.Invoke(this, new PileEdited(rowIndex, property));
+    public void EditDayFactor(DateTime date, double factor) => DayFactorEdited?.Invoke(this, new DayFactorEdited(date, factor));
     public void ClickNewProject() => NewProjectRequested?.Invoke(this, EventArgs.Empty);
     public void ClickOpenProject() => OpenProjectRequested?.Invoke(this, EventArgs.Empty);
     public void ClickSaveProjectAs() => SaveProjectAsRequested?.Invoke(this, EventArgs.Empty);

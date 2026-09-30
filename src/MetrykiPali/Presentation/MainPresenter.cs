@@ -49,6 +49,7 @@ public sealed class MainPresenter
         _view.PilesPerPageChanged += (_, _) => RefreshJournal();
         _view.ConcretePlantChanged += (_, _) => ConcretePlantChanged();
         _view.PileEdited += (_, edit) => PileEdited(edit);
+        _view.DayFactorEdited += (_, edit) => DayFactorEdited(edit);
         _view.NewProjectRequested += (_, _) => NewProject();
         _view.OpenProjectRequested += (_, _) => OpenProject();
         _view.SaveProjectAsRequested += (_, _) => SaveProjectAs();
@@ -76,6 +77,11 @@ public sealed class MainPresenter
         _project = project;
         _projectPath = path;
         _journal = new Journal(_project.Piles);
+
+        // A file from before days had their own coefficient: pin its logged days
+        // to the coefficient their volumes were computed with.
+        _journal.PinMissingFactors(_project.Settings.ConcreteFactor);
+        _project.Version = new ProjectState().Version;
 
         _loading = true;
         try
@@ -195,12 +201,13 @@ public sealed class MainPresenter
             return false;
         }
 
-        var added = _journal.Apply(plan);
+        var added = _journal.Apply(plan, _view.ConcreteFactor);
 
         RefreshJournal();
         Save();
 
-        _view.StatusText = $"Dodano {added} pali do dnia {plan.Date:dd.MM.yyyy}." +
+        _view.StatusText = $"Dodano {added} pali do dnia {plan.Date:dd.MM.yyyy} " +
+                           $"(wsp. betonu {_journal.FactorOf(plan.Date):0.00})." +
                            (plan.Moved.Count > 0 ? $" Przeniesiono {plan.Moved.Count}." : "") +
                            $"   |   {Summary()}";
         return true;
@@ -220,7 +227,7 @@ public sealed class MainPresenter
                 $"Usunąć dzień {day:dd.MM.yyyy} ({count} pali)?\n\nPale wrócą na listę nieprzypisanych."))
             return;
 
-        _journal.RemoveDay(day.Value);
+        _journal.RemoveDay(day.Value, _view.ConcreteFactor);
         RefreshJournal();
         Save();
     }
@@ -242,6 +249,34 @@ public sealed class MainPresenter
         _journal.RecalculateConcrete(_view.ConcreteFactor);
         RefreshJournal();
         SaveQuietly();
+
+        if (_journal.Assigned > 0)
+            _view.StatusText = $"Wsp. betonu {_view.ConcreteFactor:0.00} dotyczy dni wpisanych od teraz. " +
+                               "Dni już w dzienniku zachowują swój — zmienisz go w kolumnie \"Wsp. betonu\" w dzienniku.";
+    }
+
+    /// <summary>Minimum and maximum the coefficient field allows; a day is held to the same.</summary>
+    public const double MinFactor = 1.00, MaxFactor = 3.00;
+
+    private void DayFactorEdited(DayFactorEdited edit)
+    {
+        if (_loading) return;
+
+        var factor = Math.Round(edit.Factor, 2);
+        if (factor < MinFactor || factor > MaxFactor)
+        {
+            _view.ShowError("Błędny współczynnik",
+                $"Współczynnik betonu musi być między {MinFactor:0.00} a {MaxFactor:0.00}.");
+            RefreshJournal();
+            return;
+        }
+
+        var changed = _journal.SetDayFactor(edit.Date, factor);
+        RefreshJournal();
+        SaveQuietly();
+
+        if (changed > 0)
+            _view.StatusText = $"Dzień {edit.Date:dd.MM.yyyy}: wsp. betonu {factor:0.00}, przeliczono {changed} pali.";
     }
 
     private void ConcretePlantChanged()

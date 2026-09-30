@@ -39,7 +39,8 @@ public static class PileSchedule
     /// <summary>
     /// Carries pour dates from a previous pile list onto a freshly loaded one,
     /// matching by pile number. Reloading a corrected schedule must not discard
-    /// the journal - it can represent weeks of site records.
+    /// the journal - it can represent weeks of site records. The day's concrete
+    /// coefficient comes along with the date, and the volume is recomputed with it.
     /// </summary>
     public static int CarryOverDates(IEnumerable<Pile> previous, IEnumerable<Pile> fresh)
     {
@@ -50,6 +51,9 @@ public static class PileSchedule
         {
             if (!byNumber.TryGetValue(pile.Number, out var old) || old.Executed is null) continue;
             pile.Executed = old.Executed;
+            pile.ConcreteFactor = old.ConcreteFactor;
+            if (old.ConcreteFactor is { } factor)
+                pile.Concrete = PileMath.Concrete(pile.Diameter, pile.ActualLength, factor);
             kept++;
         }
 
