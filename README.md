@@ -157,6 +157,9 @@ choice is remembered. Then press **Generuj metryki — wszystkie dni** and choos
 where to save. Every day in the journal is written in one go. **Otwórz
 wygenerowany plik** opens it to check and print.
 
+The workbook opens in Excel's **page break preview** (Podgląd podziału stron) at
+70 %, so each printed page — one metryka — is outlined and numbered on screen.
+
 The PDF is drawn page for page like the workbook prints — same layout, Calibri
 embedded — so it can be sent as it is, with no Excel needed.
 
