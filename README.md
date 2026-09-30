@@ -120,6 +120,13 @@ works out the concrete for each.
 **Budowa**, **Wykonawca**, **Metoda**, **Betoniarnia** are printed on every page.
 They come pre-filled; correct them once and they are remembered.
 
+**Stopka (tekst)** is printed bottom left of every page (the company name by
+default). **Obraz w stopce** adds a picture — a logo, a stamp — from a JPG, PNG,
+BMP, GIF or TIFF file, printed about 1 cm tall, **po lewej**, **na środku** or
+**po prawej**. The picture takes that part of the footer: on the left it moves
+the text to the middle, on the right it moves the page number there. It is kept
+inside the site's file, so it travels with the site; **Usuń** takes it off.
+
 ### Step 3 — log each day's work
 
 This is the part you repeat. Set the date, type the piles, press Enter:
@@ -134,10 +141,22 @@ Write ranges and single numbers separated by commas, semicolons or spaces —
 
 The **Dziennik (dni)** tab then shows one line per day:
 
-| Data | Pale | Ilość | Beton [m³] | Stron |
-|---|---|---|---|---|
-| 12.09.2022 | 1-10, 17-18 | 12 | 14.02 | 1 |
-| 13.09.2022 | 11-16, 63-66, 77-84 | 18 | 24.18 | 2 |
+| Data | Pale | Ilość | Beton [m³] | Wsp. betonu | Stron | Metryki wygenerowane |
+|---|---|---|---|---|---|---|
+| 12.09.2022 | 1-10, 17-18 | 12 | 14.02 | 1,30 | 1 | 12.09.2022 |
+| 13.09.2022 | 11-16, 63-66, 77-84 | 18 | 24.18 | 1,30 | 2 | nie |
+
+**Kolejność dni** (or a click on the **Data** header) lists the newest day first
+or the oldest; the metryki themselves are always written in date order.
+
+**Metryki wygenerowane** shows when a day's metryki were written: a date,
+**nie**, or **częściowo** when piles were added to the day afterwards. A day
+also goes back to **nie** when its coefficient is changed, and a pile when its
+length or diameter is corrected — the printed figures no longer match.
+
+Bottom left, under the counts, **Pale bez metryk: N — pokaż które** lists
+everything still without a metryka, so nothing is missed: the piles with no
+date yet, and each day with piles not generated since they last changed.
 
 Close the app whenever you like. Tomorrow it opens exactly as you left it.
 
@@ -369,6 +388,8 @@ src/MetrykiPali/
     MetrykaWriter.cs          writes the paginated METRYKA PALI workbook
     MetrykaPdfWriter.cs       writes the same pages straight to PDF
     MetrykaFileWriter.cs      picks the writer from the file extension
+    FooterImage.cs            turns the chosen footer picture into a small PNG
+    ExcelFooterPicture.cs     puts that picture into the workbook's printed footer
     JsonProjectRepository.cs  saves and restores the journal
   Presentation/
     IMainView.cs              what the presenter may ask the window for
@@ -388,7 +409,7 @@ publish.ps1                   builds the standalone offline .exe
 dotnet test
 ```
 
-**234 tests** on xUnit v3, a few seconds, no window and no network.
+**254 tests** on xUnit v3, a few seconds, no window and no network.
 
 | Suite | What it covers |
 |---|---|
@@ -398,6 +419,7 @@ dotnet test
 | `PileMathTests` | the formula, every length in the reference table, half-away-from-zero rounding |
 | `PileTableReaderTests` | csv/xlsx/pdf, comma *and* dot decimals, junk skipped, a file locked by Excel, unsupported types |
 | `DesignerTableTests` | designers' summary tables in three real layouts (.xls and .xlsx): `-` / `÷`, single piles, cm, cage columns, totals; steel soldier columns refused; gaps and duplicate numbers |
+| `JournalToolsTests` | which piles lack a metryka (undated, never generated, changed since), journal order, footer text and picture in the workbook (VML shape in the chosen section) and in the PDF |
 | `PaginationTests` | days never share a page, an 18-pile day splits 12 + 6, date ordering |
 | `MetrykaWriterTests` | the produced workbook read back: label rows, 48-row blocks, per-page dates, page breaks, A4 fit-to-width, borders, an 80-page run |
 | `MetrykaPdfWriterTests` | the PDF read back: pages per day, dates, title and table text, Polish characters, page numbers, A4; `.pdf` vs `.xlsx` routing |

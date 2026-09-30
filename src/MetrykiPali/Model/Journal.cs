@@ -6,6 +6,15 @@ namespace MetrykiPali.Model;
 /// (numbers that are not in the schedule, piles already logged on another day)
 /// and then apply exactly what was agreed.
 /// </summary>
+/// <summary>A logged day with piles whose metryka has not been written yet.</summary>
+public sealed record MissingDay(DateTime Date, IReadOnlyList<int> Numbers, int DayCount);
+
+/// <summary>Everything that still has no metryka.</summary>
+public sealed record MissingMetryki(IReadOnlyList<int> Undated, IReadOnlyList<MissingDay> Days)
+{
+    public bool None => Undated.Count == 0 && Days.Count == 0;
+}
+
 public sealed record JournalPlan(
     DateTime Date,
     IReadOnlyList<int> Known,
@@ -67,6 +76,7 @@ public sealed class Journal
         foreach (var number in plan.Known)
         {
             if (!byNumber.TryGetValue(number, out var pile)) continue;
+            if (pile.Executed?.Date != plan.Date) pile.MetrykaGenerated = null;   // a new day: no metryka yet
             pile.Executed = plan.Date;
             pile.ConcreteFactor = dayFactor;
             RecalculateConcrete(pile, factor);
@@ -89,6 +99,7 @@ public sealed class Journal
         {
             pile.Executed = null;
             pile.ConcreteFactor = null;
+            pile.MetrykaGenerated = null;
             RecalculateConcrete(pile, factor);
             cleared++;
         }
@@ -107,6 +118,7 @@ public sealed class Journal
 
         foreach (var pile in _piles.Where(p => p.Executed?.Date == date.Date))
         {
+            if (pile.ConcreteFactor != factor) pile.MetrykaGenerated = null;   // the printed volume is out of date
             pile.ConcreteFactor = factor;
             RecalculateConcrete(pile, factor);
             changed++;
@@ -114,6 +126,28 @@ public sealed class Journal
 
         return changed;
     }
+
+    // -------------------------------------------------------------- metryki
+
+    /// <summary>Records that these days' metryki were written.</summary>
+    public void MarkGenerated(IEnumerable<WorkDay> days, DateTime when)
+    {
+        foreach (var pile in days.SelectMany(d => d.Piles)) pile.MetrykaGenerated = when;
+    }
+
+    /// <summary>A pile's metryka no longer matches it (length or diameter corrected).</summary>
+    public static void Invalidate(Pile pile) => pile.MetrykaGenerated = null;
+
+    /// <summary>
+    /// What still has no metryka: piles with no date at all, and logged days
+    /// with piles not written since they were last changed.
+    /// </summary>
+    public MissingMetryki Missing() => new(
+        _piles.Where(p => p.Executed is null).Select(p => p.Number).OrderBy(n => n).ToList(),
+        Days()
+            .Select(d => new MissingDay(d.Date, d.Piles.Where(p => p.MetrykaGenerated is null).Select(p => p.Number).ToList(), d.Piles.Count))
+            .Where(d => d.Numbers.Count > 0)
+            .ToList());
 
     /// <summary>
     /// Gives logged piles that have no coefficient of their own - from a file
@@ -141,20 +175,33 @@ public sealed class Journal
         .Select(g => new WorkDay { Date = g.Key, Piles = g.OrderBy(p => p.Number).ToList() })
         .ToList();
 
-    /// <summary>The same days rendered for the journal grid.</summary>
-    public List<JournalEntry> Entries(int pilesPerPage)
+    /// <summary>The same days rendered for the journal grid, oldest or newest first.</summary>
+    public List<JournalEntry> Entries(int pilesPerPage, bool newestFirst = false)
     {
         var perPage = Math.Max(1, pilesPerPage);
 
-        return Days().Select(day => new JournalEntry
+        var entries = Days().Select(day => new JournalEntry
         {
             Data = day.Date,
             Pale = PileNumbers.Format(day.Piles.Select(p => p.Number)),
             Ilosc = day.Piles.Count,
             Beton = Math.Round(day.Piles.Sum(p => p.Concrete), 2),
             Wsp = day.Piles[0].ConcreteFactor ?? 0,
-            Strony = (int)Math.Ceiling(day.Piles.Count / (double)perPage)
+            Strony = (int)Math.Ceiling(day.Piles.Count / (double)perPage),
+            Metryki = GeneratedState(day.Piles)
         }).ToList();
+
+        if (newestFirst) entries.Reverse();
+        return entries;
+    }
+
+    /// <summary>"12.09.2026" when every pile was written then (or later), "nie", or "częściowo".</summary>
+    private static string GeneratedState(IReadOnlyList<Pile> piles)
+    {
+        var done = piles.Where(p => p.MetrykaGenerated is not null).ToList();
+        if (done.Count == 0) return "nie";
+        if (done.Count < piles.Count) return "częściowo";
+        return done.Min(p => p.MetrykaGenerated!.Value).ToString("dd.MM.yyyy");
     }
 
     /// <summary>

@@ -16,6 +16,18 @@ internal sealed class FakeMainView : IMainView
     public double ConcreteFactor { get; set; } = 1.30;
     public int PilesPerPage { get; set; } = 12;
     public MetrykaFormat OutputFormat { get; set; } = MetrykaFormat.Xlsx;
+    public string FooterText { get; set; } = "GREIFBAU SP. Z O.O.";
+    public FooterPosition FooterImagePosition { get; set; } = FooterPosition.Center;
+    public string FooterImageLabel { get; set; } = "";
+    public bool JournalNewestFirst { get; set; }
+    public string MissingMetrykiText { get; set; } = "";
+
+    /// <summary>The file the image dialog returns; null means the user cancelled.</summary>
+    public string? ImagePath { get; set; }
+    public string? AskForImage() => ImagePath;
+
+    public List<(string Title, string Text)> Reports { get; } = new();
+    public void ShowReport(string title, string text) => Reports.Add((title, text));
     public DateTime JournalDate { get; set; } = new(2022, 9, 12);
     public string JournalPiles { get; set; } = "";
     public string StatusText { get; set; } = "";
@@ -111,6 +123,10 @@ internal sealed class FakeMainView : IMainView
     public event EventHandler? ConcretePlantChanged;
     public event EventHandler<PileEdited>? PileEdited;
     public event EventHandler<DayFactorEdited>? DayFactorEdited;
+    public event EventHandler? MissingMetrykiRequested;
+    public event EventHandler? JournalOrderChanged;
+    public event EventHandler? FooterImageRequested;
+    public event EventHandler? FooterImageCleared;
     public event EventHandler<string>? SiteSelected;
     public event EventHandler? NewSiteRequested;
     public event EventHandler? RenameSiteRequested;
@@ -157,6 +173,24 @@ internal sealed class FakeMainView : IMainView
     }
     public void EditPile(int rowIndex, string property) => PileEdited?.Invoke(this, new PileEdited(rowIndex, property));
     public void EditDayFactor(DateTime date, double factor) => DayFactorEdited?.Invoke(this, new DayFactorEdited(date, factor));
+    public void ClickMissingMetryki() => MissingMetrykiRequested?.Invoke(this, EventArgs.Empty);
+    public void ChangeJournalOrder(bool newestFirst)
+    {
+        JournalNewestFirst = newestFirst;
+        JournalOrderChanged?.Invoke(this, EventArgs.Empty);
+    }
+    public void ChooseFooterImage(string? path)
+    {
+        ImagePath = path;
+        FooterImageRequested?.Invoke(this, EventArgs.Empty);
+    }
+    public void ClickClearFooterImage() => FooterImageCleared?.Invoke(this, EventArgs.Empty);
+    public void ChangeFooter(string text, FooterPosition position)
+    {
+        FooterText = text;
+        FooterImagePosition = position;
+        SettingsChanged?.Invoke(this, EventArgs.Empty);
+    }
     public void PickSite(string name) => SiteSelected?.Invoke(this, name);
     public void AddSite(params string?[] typed)
     {

@@ -87,9 +87,44 @@ public sealed class MetrykaPdfWriter : IMetrykaWriter
         gfx.DrawString("BUDOWA: " + StripTrailingDot(s.Budowa), font, XBrushes.Black, header, XStringFormats.TopLeft);
         gfx.DrawString(s.DokumentacjaNaglowek, font, XBrushes.Black, header, XStringFormats.TopRight);
 
-        var footer = new XRect(MarginLeft, page.Height.Point - FooterBottom - line, width, line);
-        gfx.DrawString(s.Firma, font, XBrushes.Black, footer, XStringFormats.BottomLeft);
-        gfx.DrawString(number.ToString(CultureInfo.InvariantCulture), font, XBrushes.Black, footer, XStringFormats.BottomRight);
+        // Footer: text, picture and page number in the same sections as the
+        // workbook's footer, each standing on the footer line.
+        var bottom = page.Height.Point - FooterBottom;
+        var textRect = new XRect(MarginLeft, bottom - line, width, line);
+        var pageNumber = number.ToString(CultureInfo.InvariantCulture);
+
+        if (s.FooterImage is not { Length: > 0 } png)
+        {
+            gfx.DrawString(s.Firma, font, XBrushes.Black, textRect, XStringFormats.BottomLeft);
+            gfx.DrawString(pageNumber, font, XBrushes.Black, textRect, XStringFormats.BottomRight);
+            return;
+        }
+
+        var (left, center, right) = ExcelFooterPicture.Sections(s, Picture, s.Firma, pageNumber);
+        FooterItem(gfx, left, XStringFormats.BottomLeft, font, textRect, png);
+        FooterItem(gfx, center, XStringFormats.BottomCenter, font, textRect, png);
+        FooterItem(gfx, right, XStringFormats.BottomRight, font, textRect, png);
+    }
+
+    /// <summary>Stands in for the picture in <see cref="ExcelFooterPicture.Sections"/>.</summary>
+    private const string Picture = "\u0000picture";
+
+    private static void FooterItem(XGraphics gfx, string item, XStringFormat align, XFont font, XRect area, byte[] png)
+    {
+        if (item != Picture)
+        {
+            gfx.DrawString(item, font, XBrushes.Black, area, align);
+            return;
+        }
+
+        var (w, h) = FooterImage.PrintedSize(png);
+        var x = align == XStringFormats.BottomLeft ? area.Left
+              : align == XStringFormats.BottomRight ? area.Right - w
+              : area.Left + (area.Width - w) / 2;
+
+        using var stream = new MemoryStream(png);
+        using var image = XImage.FromStream(stream);
+        gfx.DrawImage(image, x, area.Bottom - h, w, h);
     }
 
     // ---------------------------------------------------------------- block
@@ -108,7 +143,7 @@ public sealed class MetrykaPdfWriter : IMetrykaWriter
         FreeText(gfx, "BUDOWA: " + s.Budowa, text, Cells(OffBudowa, 2, OffBudowa + 1, 11));
 
         gfx.DrawString("DATA:", text, XBrushes.Black, Cells(OffData, 2, OffData, 2), XStringFormats.TopLeft);
-        gfx.DrawString(date.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture), text, XBrushes.Black,
+        gfx.DrawString(date.ToString("dd/MM/yyyy", Polish), text, XBrushes.Black,
             Cells(OffData, 3, OffData, 5), XStringFormats.TopCenter);
 
         WriteTable(gfx, piles);
@@ -152,7 +187,7 @@ public sealed class MetrykaPdfWriter : IMetrykaWriter
         gfx.DrawRectangle(Medium, Cells(firstRow, 1, lastRow, LastDataColumn));
     }
 
-    /// <summary>A cell's text as Excel shows it with the General format.</summary>
+    /// <summary>A cell's text as Excel on a Polish Windows shows it with the General format ("0,4").</summary>
     private static string Value(int band, Pile pile) => band switch
     {
         0 => Number(pile.Number),
@@ -164,7 +199,15 @@ public sealed class MetrykaPdfWriter : IMetrykaWriter
         _ => pile.Reinforcement
     };
 
-    private static string Number(double value) => value.ToString(CultureInfo.InvariantCulture);
+    private static string Number(double value) => value.ToString(Polish);
+
+    /// <summary>
+    /// Polish number and date formatting - "0,4", "12.09.2022" - which is how
+    /// Excel prints the workbook on the machines this is used on, so the two
+    /// formats read the same. (The reference PDF has "0.4" and "12/09/2022":
+    /// it was printed on a machine with English regional settings.)
+    /// </summary>
+    private static readonly CultureInfo Polish = CultureInfo.GetCultureInfo("pl-PL");
 
     // ------------------------------------------------------------- geometry
 

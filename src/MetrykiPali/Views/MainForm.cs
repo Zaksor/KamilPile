@@ -55,6 +55,23 @@ public sealed class MainForm : Form, IMainView
         Items = { "Excel (.xlsx)", "PDF (.pdf)" }, SelectedIndex = 0
     };
     private readonly Label _lblStatus =new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
+    private readonly LinkLabel _lnkMissing = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
+
+    private readonly TextBox _txtFooter = new() { Dock = DockStyle.Fill };
+    private readonly Label _lblFooterImage = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
+    private readonly Button _btnFooterImage = new() { Text = "Wybierz obraz...", AutoSize = true };
+    private readonly Button _btnFooterClear = new() { Text = "Usuń", AutoSize = true };
+    private readonly ComboBox _cmbFooterPosition = new()
+    {
+        DropDownStyle = ComboBoxStyle.DropDownList, Width = 90,
+        Items = { "po lewej", "na środku", "po prawej" }, SelectedIndex = 1
+    };
+
+    private readonly ComboBox _cmbJournalOrder = new()
+    {
+        DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill,
+        Items = { "od najstarszego", "od najnowszego" }, SelectedIndex = 0
+    };
 
     public MainForm()
     {
@@ -99,6 +116,23 @@ public sealed class MainForm : Form, IMainView
     }
 
     DateTime IMainView.JournalDate { get => _dtDay.Value.Date; set => _dtDay.Value = value; }
+
+    string IMainView.FooterText { get => _txtFooter.Text; set => _txtFooter.Text = value; }
+    string IMainView.FooterImageLabel { get => _lblFooterImage.Text; set { _lblFooterImage.Text = value; _btnFooterClear.Enabled = value != "brak"; } }
+    string IMainView.MissingMetrykiText { get => _lnkMissing.Text; set => _lnkMissing.Text = value; }
+
+    // Item order follows the enum: 0 = Left, 1 = Center, 2 = Right.
+    FooterPosition IMainView.FooterImagePosition
+    {
+        get => (FooterPosition)Math.Max(0, _cmbFooterPosition.SelectedIndex);
+        set => _cmbFooterPosition.SelectedIndex = (int)value;
+    }
+
+    bool IMainView.JournalNewestFirst
+    {
+        get => _cmbJournalOrder.SelectedIndex == 1;
+        set => _cmbJournalOrder.SelectedIndex = value ? 1 : 0;
+    }
 
     bool IMainView.CanGenerate
     {
@@ -153,6 +187,10 @@ public sealed class MainForm : Form, IMainView
     public event EventHandler? ConcretePlantChanged;
     public event EventHandler<PileEdited>? PileEdited;
     public event EventHandler<DayFactorEdited>? DayFactorEdited;
+    public event EventHandler? MissingMetrykiRequested;
+    public event EventHandler? JournalOrderChanged;
+    public event EventHandler? FooterImageRequested;
+    public event EventHandler? FooterImageCleared;
     public event EventHandler<string>? SiteSelected;
     public event EventHandler? NewSiteRequested;
     public event EventHandler? RenameSiteRequested;
@@ -193,8 +231,20 @@ public sealed class MainForm : Form, IMainView
         _txtBetoniarnia.TextChanged += (_, _) => ConcretePlantChanged?.Invoke(this, EventArgs.Empty);
 
         _cmbFormat.SelectedIndexChanged += (_, _) => SettingsChanged?.Invoke(this, EventArgs.Empty);
+        _cmbFooterPosition.SelectedIndexChanged += (_, _) => SettingsChanged?.Invoke(this, EventArgs.Empty);
+        _btnFooterImage.Click += (_, _) => FooterImageRequested?.Invoke(this, EventArgs.Empty);
+        _btnFooterClear.Click += (_, _) => FooterImageCleared?.Invoke(this, EventArgs.Empty);
+        _lnkMissing.LinkClicked += (_, _) => MissingMetrykiRequested?.Invoke(this, EventArgs.Empty);
+        _cmbJournalOrder.SelectedIndexChanged += (_, _) => JournalOrderChanged?.Invoke(this, EventArgs.Empty);
 
-        foreach (var box in new[] { _txtBudowa, _txtWykonawca, _txtMetoda })
+        // Clicking the "Data" header flips the order, as users expect of a date column.
+        _gridJournal.ColumnHeaderMouseClick += (_, e) =>
+        {
+            if (_gridJournal.Columns[e.ColumnIndex].DataPropertyName != nameof(JournalEntry.Data)) return;
+            _cmbJournalOrder.SelectedIndex = 1 - _cmbJournalOrder.SelectedIndex;
+        };
+
+        foreach (var box in new[] { _txtBudowa, _txtWykonawca, _txtMetoda, _txtFooter })
             box.Leave += (_, _) => SettingsChanged?.Invoke(this, EventArgs.Empty);
 
         _gridPiles.CellValueChanged += (_, e) =>
@@ -296,8 +346,15 @@ public sealed class MainForm : Form, IMainView
             [nameof(JournalEntry.Ilosc)] = "Ilość",
             [nameof(JournalEntry.Beton)] = "Beton [m3]",
             [nameof(JournalEntry.Wsp)] = "Wsp. betonu (edytuj)",
-            [nameof(JournalEntry.Strony)] = "Stron"
+            [nameof(JournalEntry.Strony)] = "Stron",
+            [nameof(JournalEntry.Metryki)] = "Metryki wygenerowane"
         });
+
+        // The order is chosen with "Kolejność dni"; the grid's own sorting would fight it.
+        foreach (DataGridViewColumn column in _gridJournal.Columns)
+            column.SortMode = DataGridViewColumnSortMode.Programmatic;
+        if (_gridJournal.Columns[nameof(JournalEntry.Data)] is { } dataColumn)
+            dataColumn.HeaderCell.SortGlyphDirection = _cmbJournalOrder.SelectedIndex == 1 ? SortOrder.Descending : SortOrder.Ascending;
 
         if (_gridJournal.Columns[nameof(JournalEntry.Data)] is { } date)
         {
@@ -402,6 +459,38 @@ public sealed class MainForm : Form, IMainView
             FileName = suggestedName
         };
         return dialog.ShowDialog(this) == DialogResult.OK ? dialog.FileName : null;
+    }
+
+    public string? AskForImage()
+    {
+        var patterns = string.Join(";", FooterImage.Extensions.Select(e => "*" + e));
+        using var dialog = new OpenFileDialog
+        {
+            Title = "Wybierz obraz do stopki (np. logo firmy)",
+            Filter = $"Obrazy ({patterns})|{patterns}"
+        };
+        return dialog.ShowDialog(this) == DialogResult.OK ? dialog.FileName : null;
+    }
+
+    public void ShowReport(string title, string text)
+    {
+        using var form = new Form
+        {
+            Text = title, StartPosition = FormStartPosition.CenterParent, ShowInTaskbar = false,
+            MinimizeBox = false, ClientSize = new Size(720, 460), MinimumSize = new Size(400, 250)
+        };
+        var box = new TextBox
+        {
+            Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Both, WordWrap = true, Dock = DockStyle.Fill,
+            Text = text.Replace("\r\n", "\n").Replace("\n", "\r\n"), Font = new Font("Consolas", 10f), BackColor = SystemColors.Window
+        };
+        var close = new Button { Text = "Zamknij", DialogResult = DialogResult.OK, Dock = DockStyle.Bottom, Height = 32 };
+        form.Controls.Add(box);
+        form.Controls.Add(close);
+        form.AcceptButton = close;
+        form.CancelButton = close;
+        form.Shown += (_, _) => { box.SelectionStart = 0; box.SelectionLength = 0; };
+        form.ShowDialog(this);
     }
 
     public string? AskForText(string title, string prompt, string initial)
@@ -518,6 +607,23 @@ public sealed class MainForm : Form, IMainView
         AddField(layout, 1, "Wykonawca:", _txtWykonawca, "Wsp. betonu (nowe dni):", _numFactor);
         AddField(layout, 2, "Metoda:", _txtMetoda, "Pali na stronę:", _numPerPage);
 
+        // The footer: its text on one row, its picture on the next, across the box.
+        layout.Controls.Add(new Label { Text = "Stopka (tekst):", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 3);
+        layout.Controls.Add(_txtFooter, 1, 3);
+
+        _lblFooterImage.AutoSize = false;
+        _lblFooterImage.Dock = DockStyle.None;
+        _lblFooterImage.Size = new Size(220, 23);
+        _lblFooterImage.Margin = new Padding(3, 6, 3, 3);
+        var positionLabel = new Label { Text = "położenie:", AutoSize = true, Margin = new Padding(12, 7, 3, 3) };
+        // Not AutoSize: a self-sizing panel spanning percentage columns makes the
+        // table claim its full width as a minimum and push the window wider.
+        var picture = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = false, Size = new Size(100, 30), WrapContents = false, Margin = Padding.Empty };
+        picture.Controls.AddRange(new Control[] { _lblFooterImage, _btnFooterImage, _btnFooterClear, positionLabel, _cmbFooterPosition });
+        layout.Controls.Add(new Label { Text = "Obraz w stopce:", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 4);
+        layout.Controls.Add(picture, 1, 4);
+        layout.SetColumnSpan(picture, 3);
+
         box.Controls.Add(layout);
         return box;
     }
@@ -549,6 +655,8 @@ public sealed class MainForm : Form, IMainView
         layout.Controls.Add(hint, 3, 1);
         layout.SetColumnSpan(hint, 2);
         layout.Controls.Add(_btnRemoveDay, 5, 1);
+        layout.Controls.Add(new Label { Text = "Kolejność dni:", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 1);
+        layout.Controls.Add(_cmbJournalOrder, 1, 1);
 
         box.Controls.Add(layout);
         return box;
@@ -578,19 +686,27 @@ public sealed class MainForm : Form, IMainView
 
     private Control BuildActionBar()
     {
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 6, RowCount = 1, AutoSize = true, Padding = new Padding(0, 8, 0, 0) };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 6, RowCount = 2, AutoSize = true, Padding = new Padding(0, 8, 0, 0) };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
+
+        // Bottom left: the counts, and under them the way to see which piles
+        // still lack a metryka. The buttons take both rows.
         layout.Controls.Add(_lblStatus, 0, 0);
-        layout.Controls.Add(new Label { Text = "Format:", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight }, 1, 0);
-        layout.Controls.Add(_cmbFormat, 2, 0);
-        layout.Controls.Add(_btnGenerate, 3, 0);
-        layout.Controls.Add(_btnGenerateSelected, 4, 0);
-        layout.Controls.Add(_btnOpen, 5, 0);
+        layout.Controls.Add(_lnkMissing, 0, 1);
+
+        var format = new Label { Text = "Format:", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight };
+        foreach (var (control, column) in new (Control, int)[] { (format, 1), (_cmbFormat, 2), (_btnGenerate, 3), (_btnGenerateSelected, 4), (_btnOpen, 5) })
+        {
+            layout.Controls.Add(control, column, 0);
+            layout.SetRowSpan(control, 2);
+        }
         return layout;
     }
 
