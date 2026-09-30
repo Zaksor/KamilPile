@@ -42,7 +42,7 @@ public class MainPresenterTests
     public void Starts_by_backing_up_and_reopening_the_saved_project()
     {
         Assert.Equal(1, _repository.Backups);
-        Assert.Equal(_repository.DefaultPath, _presenter.ProjectPath);
+        Assert.Equal(_repository.SitePath(_presenter.SiteName), _presenter.ProjectPath);
     }
 
     [Fact]
@@ -460,7 +460,7 @@ public class MainPresenterTests
 
         Assert.Equal(1.25, view.Journal[0].Wsp);
         Assert.Equal(PileMath.Concrete(0.4, 7, 1.25), view.Piles[0].Concrete);
-        Assert.Equal(2, store.Load(store.DefaultPath)!.Version);
+        Assert.Equal(2, store.Load(store.SitePath(view.CurrentSite))!.Version);
     }
 
     [Fact]
@@ -838,74 +838,174 @@ public class MainPresenterTests
         Assert.Single(_view.Journal);          // still on screen
     }
 
+    // ---------------------------------------------------------------- sites
+
     [Fact]
-    public void Saving_the_project_elsewhere_moves_where_it_is_kept()
+    public void The_first_start_makes_a_site_and_lists_it()
     {
-        LoadSchedule();
-        _view.SaveProjectPath = @"D:\budowy\tuwima.mpali";
-
-        _view.ClickSaveProjectAs();
-
-        Assert.Equal(@"D:\budowy\tuwima.mpali", _presenter.ProjectPath);
-        Assert.True(_repository.Has(@"D:\budowy\tuwima.mpali"));
+        Assert.Equal(new[] { SiteNames.Fallback }, _view.Sites);
+        Assert.Equal(SiteNames.Fallback, _view.CurrentSite);
+        Assert.Equal(_repository.SitePath(SiteNames.Fallback), _presenter.ProjectPath);
     }
 
     [Fact]
-    public void Opening_another_project_replaces_what_is_on_screen()
+    public void The_single_project_from_before_sites_becomes_the_first_site_and_is_left_as_it_was()
+    {
+        var store = new InMemoryProjectRepository();
+        var legacy = new ProjectState
+        {
+            Settings = new MetrykaSettings { Budowa = "Łódź, ul. Tuwima." },
+            Piles = { new Pile { Number = 1, Diameter = 0.4, ActualLength = 7, Executed = D12, ConcreteFactor = 1.3 } }
+        };
+        store.Save(store.DefaultPath, legacy);
+        var savesBefore = store.Saves;
+
+        var view = new FakeMainView();
+        new MainPresenter(view, _reader, _writer, store).Start();
+
+        Assert.Equal(new[] { "Łódź, ul. Tuwima" }, view.Sites);
+        Assert.Single(view.Journal);
+        Assert.True(store.Has(store.SitePath("Łódź, ul. Tuwima")));
+        Assert.Equal(savesBefore + 1, store.Saves);        // only the new site was written
+    }
+
+    [Fact]
+    public void A_new_site_starts_empty_and_keeps_the_contractor_details()
     {
         LoadSchedule();
         _view.LogDay(D12, "1-12");
-        _view.SaveProjectPath = @"D:\budowy\pierwsza.mpali";
+        _view.Wykonawca = "Firma X";
+
+        _view.AddSite("Warszawa, Puławska 10");
+
+        Assert.Equal("Warszawa, Puławska 10", _view.CurrentSite);
+        Assert.Equal(new[] { SiteNames.Fallback, "Warszawa, Puławska 10" }, _view.Sites);
+        Assert.Empty(_view.Piles);
+        Assert.Empty(_view.Journal);
+        Assert.Equal("", _view.SourcePath);
+        Assert.Equal("Warszawa, Puławska 10", _view.Budowa);
+        Assert.Equal("Firma X", _view.Wykonawca);
+    }
+
+    [Fact]
+    public void Each_site_keeps_its_own_schedule_and_journal()
+    {
+        LoadSchedule(@"C:\budowa\pierwsza.xlsx");
+        _view.LogDay(D12, "1-12");
+        _view.AddSite("Druga");
+        LoadSchedule(@"C:\budowa\druga.xlsx");
+        _view.LogDay(D13, "20-30");
+
+        _view.PickSite(SiteNames.Fallback);
+        Assert.Equal(@"C:\budowa\pierwsza.xlsx", _view.SourcePath);
+        Assert.Equal("1-12", Assert.Single(_view.Journal).Pale);
+
+        _view.PickSite("Druga");
+        Assert.Equal(@"C:\budowa\druga.xlsx", _view.SourcePath);
+        Assert.Equal("20-30", Assert.Single(_view.Journal).Pale);
+    }
+
+    [Fact]
+    public void The_site_open_at_closing_is_opened_next_time()
+    {
+        _view.AddSite("Druga");
+        LoadSchedule();
+        _view.LogDay(D13, "1-5");
+        _view.CloseWindow();
+
+        var next = new FakeMainView();
+        new MainPresenter(next, _reader, _writer, _repository).Start();
+
+        Assert.Equal("Druga", next.CurrentSite);
+        Assert.Equal("1-5", Assert.Single(next.Journal).Pale);
+    }
+
+    [Fact]
+    public void A_site_name_already_used_is_refused_and_asked_again()
+    {
+        _view.AddSite(SiteNames.Fallback.ToUpperInvariant(), "Inna");
+
+        Assert.Contains(_view.Errors, e => e.Contains("już istnieje"));
+        Assert.Equal("Inna", _view.CurrentSite);
+    }
+
+    [Fact]
+    public void Cancelling_the_name_adds_no_site()
+    {
+        _view.AddSite((string?)null);
+
+        Assert.Single(_view.Sites);
+    }
+
+    [Fact]
+    public void Characters_a_file_name_cannot_hold_are_replaced()
+    {
+        _view.AddSite("Budynek A/B: etap 1.");
+
+        Assert.Equal("Budynek A-B- etap 1", _view.CurrentSite);
+    }
+
+    [Fact]
+    public void A_site_can_be_renamed_without_losing_its_journal()
+    {
+        LoadSchedule();
+        _view.LogDay(D12, "1-12");
+
+        _view.ClickRenameSite("Tuwima 15");
+
+        Assert.Equal(new[] { "Tuwima 15" }, _view.Sites);
+        Assert.Equal(_repository.SitePath("Tuwima 15"), _presenter.ProjectPath);
+        Assert.Single(_repository.Load(_repository.SitePath("Tuwima 15"))!.Piles, p => p.Number == 1 && p.Executed == D12);
+        Assert.Equal("Tuwima 15", _repository.LastSite);
+    }
+
+    [Fact]
+    public void A_copy_of_the_site_can_be_saved_without_moving_the_site()
+    {
+        LoadSchedule();
+        _view.SaveProjectPath = @"D:\kopie\tuwima.mpali";
+
         _view.ClickSaveProjectAs();
 
-        _view.ClickNewProject();
-        Assert.Empty(_view.Journal);
+        Assert.True(_repository.Has(@"D:\kopie\tuwima.mpali"));
+        Assert.Equal(_repository.SitePath(SiteNames.Fallback), _presenter.ProjectPath);
+        Assert.Equal(SiteNames.Fallback + ".mpali", _view.SuggestedProjectName);
+    }
 
-        _view.ProjectPath = @"D:\budowy\pierwsza.mpali";
+    [Fact]
+    public void A_site_saved_as_a_file_can_be_added_to_the_list()
+    {
+        LoadSchedule();
+        _view.LogDay(D12, "1-12");
+        _view.SaveProjectPath = @"D:\kopie\Tuwima.mpali";
+        _view.ClickSaveProjectAs();
+        _view.AddSite("Pusta");
+
+        _view.ProjectPath = @"D:\kopie\Tuwima.mpali";
         _view.ClickOpenProject();
 
-        Assert.Single(_view.Journal);
+        Assert.Equal("Tuwima", _view.CurrentSite);
+        Assert.Contains("Tuwima", _view.Sites);
         Assert.Equal(12, _view.Journal[0].Ilosc);
     }
 
     [Fact]
-    public void Opening_a_project_that_cannot_be_read_is_reported()
+    public void Opening_a_site_file_that_cannot_be_read_is_reported()
     {
-        _view.ProjectPath = @"D:\budowy\brak.mpali";
+        _view.ProjectPath = @"D:\kopie\brak.mpali";
 
         _view.ClickOpenProject();
 
         Assert.Single(_view.Errors);
-    }
-
-    /// <summary>
-    /// Starting a new project must not touch the file the user saved this site
-    /// to - losing a site's journal that way would be silent and unrecoverable.
-    /// </summary>
-    [Fact]
-    public void Starting_a_new_project_leaves_the_saved_project_file_alone()
-    {
-        LoadSchedule();
-        _view.LogDay(D12, "1-12");
-        _view.SaveProjectPath = @"D:\budowy\tuwima.mpali";
-        _view.ClickSaveProjectAs();
-
-        _view.ClickNewProject();
-
-        Assert.Equal(_repository.DefaultPath, _presenter.ProjectPath);
-        Assert.Equal(12, _repository.Load(@"D:\budowy\tuwima.mpali")!.Piles.Count(p => p.Executed is not null));
+        Assert.Single(_view.Sites);
     }
 
     [Fact]
-    public void Starting_a_new_project_is_confirmed_first()
+    public void The_data_folder_can_be_opened()
     {
-        LoadSchedule();
-        _view.LogDay(D12, "1-12");
-        _view.AnswerConfirm = (_, _) => false;
+        _view.ClickShowDataFolder();
 
-        _view.ClickNewProject();
-
-        Assert.Single(_view.Journal);
+        Assert.Equal(_repository.DataDirectory, Assert.Single(_view.Opened));
     }
 
     // --------------------------------------------------------------- status

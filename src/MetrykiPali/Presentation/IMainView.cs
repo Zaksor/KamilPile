@@ -43,16 +43,20 @@ public interface IMainView
     void ShowRanges(IReadOnlyList<PileRange> ranges);
     void ShowPiles(IReadOnlyList<Pile> piles);
     void ShowJournal(IReadOnlyList<JournalEntry> entries);
+    void ShowSites(IReadOnlyList<string> sites, string current);
     void RefreshPiles();
 
     // --- talking to the user -------------------------------------------
     string? AskForSchedule();
     string? AskWhereToSaveMetryki(string suggestedName);
     string? AskForProject();
-    string? AskWhereToSaveProject();
+    string? AskWhereToSaveProject(string suggestedName);
     void ShowError(string title, string message);
     void ShowInfo(string title, string message);
     bool Confirm(string title, string question);
+    string? AskForText(string title, string prompt, string initial);
+
+    /// <summary>Opens a file in its program, or a folder in Explorer.</summary>
     void OpenExternally(string path);
 
     // --- what the user asked for ---------------------------------------
@@ -69,8 +73,11 @@ public interface IMainView
     event EventHandler ConcretePlantChanged;
     event EventHandler<PileEdited> PileEdited;
     event EventHandler<DayFactorEdited> DayFactorEdited;
-    event EventHandler NewProjectRequested;
+    event EventHandler<string> SiteSelected;
+    event EventHandler NewSiteRequested;
+    event EventHandler RenameSiteRequested;
     event EventHandler OpenProjectRequested;
     event EventHandler SaveProjectAsRequested;
+    event EventHandler ShowDataFolderRequested;
     event EventHandler ViewClosing;
 }

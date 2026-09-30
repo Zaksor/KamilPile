@@ -28,7 +28,7 @@ internal static class Program
         var useLocalData = Directory.Exists(localData);
 
         var view = new MainForm();
-        if (useLocalData) view.Text += "   [WERSJA TESTOWA — dane z folderu \"dane\" obok programu]";
+        if (useLocalData) view.SetTitleSuffix("   [WERSJA TESTOWA — dane z folderu \"dane\" obok programu]");
 
         var presenter = new MainPresenter(
             view,

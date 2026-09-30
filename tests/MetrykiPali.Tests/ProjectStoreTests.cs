@@ -177,6 +177,56 @@ public sealed class ProjectStoreTests : IDisposable
         Assert.DoesNotContain("\"ConcreteFactor\": null", File.ReadAllText(path));
     }
 
+    // ---------------------------------------------------------------- sites
+
+    [Fact]
+    public void Sites_are_the_mpali_files_in_the_sites_folder_in_polish_order_backups_left_out()
+    {
+        var store = new JsonProjectRepository(_dir);
+        foreach (var name in new[] { "Żoliborz", "Łódź", "Aleje", "Lublin" })
+            store.Save(store.SitePath(name), SampleProject());
+        store.BackupOnce(store.SitePath("Łódź"));
+
+        Assert.Equal(new[] { "Aleje", "Lublin", "Łódź", "Żoliborz" }, store.ListSites());
+    }
+
+    [Fact]
+    public void A_site_is_renamed_with_its_file_and_a_taken_name_is_refused()
+    {
+        var store = new JsonProjectRepository(_dir);
+        store.Save(store.SitePath("Stara"), SampleProject());
+        store.Save(store.SitePath("Inna"), SampleProject());
+        store.LastSite = "Stara";
+
+        store.RenameSite("Stara", "Nowa");
+
+        Assert.Equal(new[] { "Inna", "Nowa" }, store.ListSites());
+        Assert.Equal("Nowa", store.LastSite);
+        Assert.NotNull(store.Load(store.SitePath("Nowa")));
+        Assert.Throws<IOException>(() => store.RenameSite("Nowa", "Inna"));
+    }
+
+    [Fact]
+    public void The_last_site_is_remembered_across_instances()
+    {
+        new JsonProjectRepository(_dir).LastSite = "Tuwima";
+
+        Assert.Equal("Tuwima", new JsonProjectRepository(_dir).LastSite);
+    }
+
+    [Theory]
+    [InlineData("  Tuwima   15  ", "Tuwima 15")]
+    [InlineData("A/B\\C:D*E?F\"G<H>I|J", "A-B-C-D-E-F-G-H-I-J")]
+    [InlineData("Łódź, ul. Tuwima.", "Łódź, ul. Tuwima")]
+    [InlineData("   ", null)]
+    [InlineData("///", null)]
+    public void Site_names_are_made_safe_for_a_file_name(string typed, string? expected)
+        => Assert.Equal(expected, SiteNames.Clean(typed));
+
+    [Fact]
+    public void A_name_already_taken_gets_a_number()
+        => Assert.Equal("Tuwima (3)", SiteNames.Unique("Tuwima", new[] { "tuwima", "Tuwima (2)" }));
+
     /// <summary>
     /// A test build is given its own folder so it can never write over the real
     /// journal in %APPDATA%.

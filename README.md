@@ -31,7 +31,7 @@ the job you press one button and get the whole set of metryki.
 flowchart LR
     A["📄 tabelka z palami<br/>from the designer"] --> B["Wczytaj tabelkę<br/>(load it, once)"]
     B --> C["Dziennik robót<br/>each evening, type<br/>the piles you finished"]
-    C -->|"saved automatically"| D[("💾 projekt.mpali<br/>on your PC")]
+    C -->|"saved automatically"| D[("💾 one file per site<br/>on your PC")]
     D -->|"reopened next morning"| C
     C --> E["Generuj metryki<br/>(one button, at the end)"]
     E --> F["📘 Metryki pali .xlsx or .pdf<br/>one page per 12 piles<br/>each page dated"]
@@ -184,8 +184,8 @@ flowchart TB
         P --> J["Journal<br/>each pile knows its pour date"]
     end
     subgraph DISK["Saved on your PC"]
-        F[("%APPDATA%\MetrykiPali\projekt.mpali<br/>plain JSON")]
-        BK[("projekt-YYYYMMDD.mpali.bak<br/>one per day")]
+        F[("%APPDATA%\MetrykiPali\budowy\*.mpali<br/>one per site, plain JSON")]
+        BK[("<budowa>-YYYYMMDD.mpali.bak<br/>one per day")]
     end
     subgraph OUT["What you get out"]
         M["Metryki pali.xlsx"]
@@ -197,14 +197,25 @@ flowchart TB
     J --> M
 ```
 
+**Sites (budowy)** — every site has its own file, holding its own schedule,
+journal and header details. Pick the site from the **Budowa** list at the top of
+the window; its last entry, **➕ Nowa budowa...**, adds one (so does the button
+beside it). A new site starts with no schedule and no journal, and keeps the
+contractor, method, plant and coefficient of the site you were on. The app
+reopens the site you were on when you closed it.
+
 **Where the journal is kept**
 
 ```
-%APPDATA%\MetrykiPali\projekt.mpali
+%APPDATA%\MetrykiPali\budowy\<nazwa budowy>.mpali
 ```
 
-which is usually `C:\Users\<you>\AppData\Roaming\MetrykiPali\`. Use
-**Projekt → Pokaż folder z danymi** to open it.
+which is usually `C:\Users\<you>\AppData\Roaming\MetrykiPali\budowy\`. Use
+**Budowa → Pokaż folder z danymi** to open it.
+
+The first time this version starts, the single `projekt.mpali` kept by earlier
+versions is copied in as the first site, named after its **Budowa** field. The
+old file is left exactly as it was, as a spare copy.
 
 **What is in it** — plain readable JSON: the site details, the ranges from the
 schedule, and every pile with its lengths and its pour date. You can open it in
@@ -221,12 +232,13 @@ Notepad. You can copy it to another machine. You can back it up like any file.
 
 **A separate copy for testing** — if a folder named `dane` sits next to
 `MetrykiPali.exe`, that copy of the app keeps its journal there instead of in
-`%APPDATA%`, and says so in the window title. Put a copy of `projekt.mpali` in it
+`%APPDATA%`, and says so in the window title. Put a copy of `projekt.mpali` (or a `budowy` folder) in it
 to try a new version on real data without any risk to the real journal.
 
-**More than one site at a time** — use **Projekt → Zapisz jako...** to keep a
-separate `.mpali` file per site, and **Projekt → Otwórz...** to switch. Starting
-a new project never touches the file you saved a site to.
+**Moving a site between computers** — **Budowa → Zapisz kopię budowy jako...**
+writes the open site to a file of your choice; **Budowa → Dodaj budowę z
+pliku...** adds such a file to the list on the other machine. **Budowa → Zmień
+nazwę budowy...** renames the open one.
 
 **Reloading a corrected schedule keeps the journal.** If the designer reissues
 the table, load it again: pour dates are matched back onto the new piles by
@@ -373,7 +385,7 @@ publish.ps1                   builds the standalone offline .exe
 dotnet test
 ```
 
-**217 tests** on xUnit v3, a few seconds, no window and no network.
+**234 tests** on xUnit v3, a few seconds, no window and no network.
 
 | Suite | What it covers |
 |---|---|
@@ -386,7 +398,7 @@ dotnet test
 | `PaginationTests` | days never share a page, an 18-pile day splits 12 + 6, date ordering |
 | `MetrykaWriterTests` | the produced workbook read back: label rows, 48-row blocks, per-page dates, page breaks, A4 fit-to-width, borders, an 80-page run |
 | `MetrykaPdfWriterTests` | the PDF read back: pages per day, dates, title and table text, Polish characters, page numbers, A4; `.pdf` vs `.xlsx` routing |
-| `ProjectStoreTests` | round-trip, pour dates and corrected lengths, Polish characters, missing/corrupt files, daily backup |
+| `ProjectStoreTests` | round-trip, pour dates and corrected lengths, Polish characters, missing/corrupt files, daily backup; sites listed in Polish order, renamed, last one remembered; safe site names |
 | `WorkflowTests` | three site days across two restarts, then one generation |
 | `RobustnessTests` | awkward inputs found by probing: `.xls` and corrupt workbooks, a schedule behind a cover sheet, split PDF rows, pour dates across timezones |
 
